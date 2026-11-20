@@ -1714,7 +1714,10 @@ mod tests {
     #[test]
     fn webhook_endpoints_are_dropped() {
         for url in [
-            concat!("https://hooks.slack.com/services/", "T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"),
+            concat!(
+                "https://hooks.slack.com/services/",
+                "T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+            ),
             "https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjKlMnOpQrStUvWx",
             "https://contoso.webhook.office.com/webhookb2/abc@def/IncomingWebhook/123/456",
             "https://hooks.zapier.com/hooks/catch/123/abc/",

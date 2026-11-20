@@ -806,7 +806,10 @@ mod tests {
     fn known_credential_formats() {
         let known = [
             concat!("gh", "p_0123456789abcdefghijABCDEFGHIJ012345"),
-            concat!("github_", "pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz"),
+            concat!(
+                "github_",
+                "pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz"
+            ),
             concat!("glp", "at-0123456789abcdefghij"),
             concat!("xo", "xb-123456789012-1234567890123-AbCdEfGhIjKlMnOp"),
             concat!("sk_", "live_0123456789abcdefghijklmnop"),
