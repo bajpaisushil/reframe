@@ -60,7 +60,11 @@ export function focusableElements(container: HTMLElement): HTMLElement[] {
     "[contenteditable='true']",
   ].join(",");
   return Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
-    (el) => !el.hasAttribute("inert") && el.getClientRects().length > 0,
+    (el) =>
+      // `[tabindex]` also matches disabled controls; they cannot actually take focus.
+      !(el as HTMLButtonElement).disabled &&
+      !el.closest("[inert], fieldset[disabled]") &&
+      el.getClientRects().length > 0,
   );
 }
 

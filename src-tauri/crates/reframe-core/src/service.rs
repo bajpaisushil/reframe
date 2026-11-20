@@ -494,7 +494,11 @@ impl ReframeService {
                                 }
                             }
                         }
-                        sink(event);
+                        // RunFinished is announced only after the run is persisted and the
+                        // active workspace updated (below), so listeners never see stale state.
+                        if !matches!(event, RestoreEvent::RunFinished { .. }) {
+                            sink(event);
+                        }
                     }
                 };
                 if let Err(e) = db.save_run(&lock(&latest).clone()) {
@@ -503,6 +507,7 @@ impl ReframeService {
                 let run = restoration::execute(&env, &ws, options, &cancel, &tracking);
                 Self::finish_run(&db, &ws, &run);
                 lock(&runs).remove(&run.id);
+                sink(RestoreEvent::RunFinished { run });
             });
         if let Err(e) = spawn {
             lock(&self.runs).remove(&run_id);
@@ -850,6 +855,78 @@ mod tests {
         settings.startup.action = StartupAction::RestoreWorkspace;
         settings.startup.workspace_id = None;
         assert!(svc.update_settings(settings).is_err());
+    }
+
+    #[test]
+    fn run_finished_is_announced_after_state_is_persisted() {
+        use reframe_platform::mock::{LaunchRule, MockWindowSpec};
+        use reframe_platform::{Rect, WindowState};
+
+        let platform = Arc::new(MockPlatform::new());
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("editor");
+        std::fs::write(&exe, "#!/bin/sh\n").unwrap();
+        platform.add_rule(LaunchRule::new("editor").window(MockWindowSpec::titled("Doc — Editor")));
+        let svc = Arc::new(
+            ReframeService::new(
+                platform.clone(),
+                Database::open_in_memory().unwrap(),
+                "test",
+            )
+            .with_timing(RestoreTiming {
+                poll_interval: Duration::from_millis(10),
+                settle: Duration::from_millis(50),
+                close_wait: Duration::from_millis(100),
+            }),
+        );
+        let mut ws = svc.create_workspace(new_ws("Dev")).unwrap();
+        let mut entry = ApplicationEntry::new("exe:editor", "Editor", "generic");
+        entry.launch.executable = Some(exe);
+        entry.windows.push(WindowSnapshot {
+            title: "Doc — Editor".into(),
+            class_name: None,
+            bounds: Rect::new(10, 10, 400, 300),
+            state: WindowState::Normal,
+            monitor_id: None,
+        });
+        ws.applications = vec![entry];
+        let ws = svc.update_workspace(ws).unwrap();
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let observer = Arc::clone(&svc);
+        let sink: Arc<EventSink> = Arc::new(move |event| {
+            if let RestoreEvent::RunFinished { run } = event {
+                let active = observer.active_workspace().unwrap();
+                let still_running = observer.active_runs().iter().any(|r| r.id == run.id);
+                let stored = observer.get_run(run.id).map(|r| r.status).ok();
+                let _ = tx.send((active, still_running, stored, run.status));
+            }
+        });
+        let request = RestoreRequest {
+            workspace_id: ws.id,
+            mode: SwitchMode::Additive,
+            entry_ids: None,
+            close_window_ids: vec![],
+        };
+        svc.start_restore(request, sink).unwrap();
+        let (active, still_running, stored, status) = rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("restore finished");
+        assert_eq!(status, RunStatus::Completed);
+        assert_eq!(
+            active,
+            Some(ws.id),
+            "active workspace saved before RunFinished"
+        );
+        assert!(
+            !still_running,
+            "run left the active list before RunFinished"
+        );
+        assert_eq!(
+            stored,
+            Some(RunStatus::Completed),
+            "run persisted before RunFinished"
+        );
     }
 
     #[test]
