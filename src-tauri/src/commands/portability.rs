@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use reframe_core::model::{ImportPreview, ImportResolution, Workspace};
-use tauri::State;
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use super::blocking;
@@ -30,9 +30,12 @@ pub async fn preview_import(
 
 #[tauri::command]
 pub async fn commit_import(
+    app: AppHandle,
     state: State<'_, AppState>,
     resolution: ImportResolution,
 ) -> CommandResult<Workspace> {
     let svc = state.service.clone();
-    blocking(move || svc.commit_import(resolution)).await
+    let result = blocking(move || svc.commit_import(resolution)).await;
+    crate::tray::refresh(&app);
+    result
 }

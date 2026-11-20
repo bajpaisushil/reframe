@@ -3,7 +3,7 @@ use reframe_core::model::{
     NewWorkspace, Workspace, WorkspaceHealth, WorkspaceSummary,
 };
 use reframe_platform::LaunchTarget;
-use tauri::State;
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use super::blocking;
@@ -24,30 +24,39 @@ pub async fn get_workspace(state: State<'_, AppState>, id: Uuid) -> CommandResul
 
 #[tauri::command]
 pub async fn create_workspace(
+    app: AppHandle,
     state: State<'_, AppState>,
     input: NewWorkspace,
 ) -> CommandResult<Workspace> {
     let svc = state.service.clone();
-    blocking(move || svc.create_workspace(input)).await
+    let result = blocking(move || svc.create_workspace(input)).await;
+    crate::tray::refresh(&app);
+    result
 }
 
 #[tauri::command]
 pub async fn capture_workspace(
+    app: AppHandle,
     state: State<'_, AppState>,
     request: CaptureRequest,
 ) -> CommandResult<CapturedWorkspace> {
     let svc = state.service.clone();
-    blocking(move || svc.capture_workspace(request)).await
+    let result = blocking(move || svc.capture_workspace(request)).await;
+    crate::tray::refresh(&app);
+    result
 }
 
 #[tauri::command]
 pub async fn recapture_workspace(
+    app: AppHandle,
     state: State<'_, AppState>,
     id: Uuid,
     selections: Vec<CaptureSelection>,
 ) -> CommandResult<CapturedWorkspace> {
     let svc = state.service.clone();
-    blocking(move || svc.recapture_workspace(id, &selections)).await
+    let result = blocking(move || svc.recapture_workspace(id, &selections)).await;
+    crate::tray::refresh(&app);
+    result
 }
 
 #[tauri::command]
@@ -70,23 +79,38 @@ pub async fn create_manual_entry(
 
 #[tauri::command]
 pub async fn update_workspace(
+    app: AppHandle,
     state: State<'_, AppState>,
     workspace: Workspace,
 ) -> CommandResult<Workspace> {
     let svc = state.service.clone();
-    blocking(move || svc.update_workspace(workspace)).await
+    let result = blocking(move || svc.update_workspace(workspace)).await;
+    crate::tray::refresh(&app);
+    result
 }
 
 #[tauri::command]
-pub async fn delete_workspace(state: State<'_, AppState>, id: Uuid) -> CommandResult<()> {
+pub async fn delete_workspace(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> CommandResult<()> {
     let svc = state.service.clone();
-    blocking(move || svc.delete_workspace(id)).await
+    let result = blocking(move || svc.delete_workspace(id)).await;
+    crate::tray::refresh(&app);
+    result
 }
 
 #[tauri::command]
-pub async fn duplicate_workspace(state: State<'_, AppState>, id: Uuid) -> CommandResult<Workspace> {
+pub async fn duplicate_workspace(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> CommandResult<Workspace> {
     let svc = state.service.clone();
-    blocking(move || svc.duplicate_workspace(id)).await
+    let result = blocking(move || svc.duplicate_workspace(id)).await;
+    crate::tray::refresh(&app);
+    result
 }
 
 #[tauri::command]

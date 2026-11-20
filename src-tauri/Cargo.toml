@@ -40,7 +40,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 reframe-core.workspace = true
 reframe-platform.workspace = true
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"

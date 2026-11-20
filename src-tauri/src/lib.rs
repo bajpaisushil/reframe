@@ -5,6 +5,7 @@ mod error;
 mod events;
 mod startup;
 mod state;
+mod tray;
 
 use reframe_core::ReframeService;
 use reframe_core::database::Database;
@@ -19,11 +20,7 @@ pub fn run() {
     tauri::Builder::default()
         // Must be registered first: a second launch focuses the existing window instead.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            tray::show_main_window(app)
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
@@ -38,6 +35,7 @@ pub fn run() {
             let version = app.package_info().version.to_string();
             let service = ReframeService::new(reframe_platform::native(), db, version);
             app.manage(AppState::new(service, launched_at_login));
+            tray::init(app.handle());
             startup::on_launch(app.handle());
             Ok(())
         })
