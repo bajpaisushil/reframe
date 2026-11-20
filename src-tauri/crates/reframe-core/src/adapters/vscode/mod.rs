@@ -37,6 +37,9 @@
 //!   windows and unsaved ("Untitled") multi-root workspaces.
 //! - When two different folders share a name, the most recently opened existing one is
 //!   assigned first.
+//! - A title segment equal to one of the user's profile names is taken to be
+//!   `${profileName}`, so a folder named exactly like a profile is not recognised in a window
+//!   that uses another profile and has an editor open (the title can't tell the two apart).
 //! - Windows that show no folder (empty windows, loose files) are not reopened.
 //! - Instances started with a custom `--user-data-dir` are captured, but restored into the
 //!   default instance because command-line arguments are not stored.

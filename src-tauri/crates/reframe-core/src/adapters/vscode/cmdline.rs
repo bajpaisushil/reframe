@@ -111,7 +111,8 @@ fn local_path(arg: &str, cwd: Option<&Path>, os: OsKind) -> Option<PathBuf> {
     if paths::is_absolute(arg, os) {
         return Some(normalize(Path::new(arg)));
     }
-    let cwd = cwd.filter(|c| c.is_absolute())?;
+    // Absolute on `os`, like `arg` (not on the OS Reframe was compiled for).
+    let cwd = cwd.filter(|c| paths::is_absolute(&c.to_string_lossy(), os))?;
     Some(normalize(&cwd.join(arg)))
 }
 
@@ -205,6 +206,28 @@ mod tests {
             parse(&args(&["code", "."]), None, OsKind::Linux)
                 .paths
                 .is_empty()
+        );
+        // The working directory is judged by the given OS, whatever OS runs the test.
+        assert_eq!(
+            parse(
+                &args(&["Code.exe", "."]),
+                Some(Path::new(r"C:\src\reframe")),
+                OsKind::Windows
+            )
+            .paths,
+            vec![Recent::new(
+                PathBuf::from(r"C:\src\reframe"),
+                RecentKind::Folder
+            )]
+        );
+        assert!(
+            parse(
+                &args(&["code", "."]),
+                Some(Path::new("relative/dir")),
+                OsKind::Linux
+            )
+            .paths
+            .is_empty()
         );
     }
 
