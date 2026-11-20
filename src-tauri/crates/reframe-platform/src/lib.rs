@@ -26,6 +26,10 @@ pub mod linux;
 pub mod macos;
 #[cfg(target_os = "windows")]
 pub mod win32;
+// The Windows implementation's pure decision logic, unit-tested on every OS.
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "win32/logic/mod.rs"]
+mod win32_logic;
 
 #[cfg(any(test, feature = "mock"))]
 pub mod mock;
