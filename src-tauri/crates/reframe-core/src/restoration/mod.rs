@@ -3,18 +3,19 @@
 
 pub mod layout;
 pub mod matcher;
+pub mod orchestrator;
 pub mod planner;
+pub(crate) mod validate;
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use chrono::Utc;
 use reframe_platform::{Platform, WindowId};
 use uuid::Uuid;
 
 use crate::adapters::AdapterRegistry;
-use crate::model::{RestoreEvent, RestoreRun, RunStatus, SwitchMode, Workspace};
+use crate::model::{RestoreEvent, RestoreRun, SwitchMode, Workspace};
 
 /// Timing knobs (shortened in tests).
 #[derive(Debug, Clone)]
@@ -57,37 +58,48 @@ pub struct RestoreOptions {
 pub type EventSink = dyn Fn(RestoreEvent) + Send + Sync;
 
 /// Run a restore to completion (blocking). Contract:
-/// 1. Replace mode: gracefully close `close_window_ids` (never kill), wait up to
-///    `timing.close_wait`, report windows that stayed open (`WindowCloseUpdated`).
-/// 2. Plan the dependency DAG (`planner`); invalid graphs fail the run with messages.
-/// 3. Merge/Replace: entries already satisfied by running windows are not relaunched; their
-///    windows are repositioned. Additive: everything launches.
-/// 4. Launch independent entries in parallel (≤ `max_parallel`, staggered by
-///    `launch_delay_ms`), dependents after their dependencies finished; retries + timeouts
-///    per entry; dependents of failed entries are Skipped; unrelated entries continue.
-/// 5. Match new windows to saved `WindowSnapshot`s and apply placement (monitor-remapped).
-/// 6. Emit `EntryUpdated` on every status change, honour `cancel`, return the final run.
 ///
-/// PLACEHOLDER until the restoration engine lands.
+/// 1. Emit `RunStarted` first (every selected entry `Pending`, disabled ones
+///    `Skipped "Disabled"`) and `RunFinished` last, after every worker thread has finished.
+///    `EntryUpdated` is emitted on every status, attempt, window-count or message change;
+///    statuses only move forward and a finished entry never changes again.
+/// 2. Plan the dependency DAG ([`planner`]). An invalid graph fails the run with the planner's
+///    messages and every planned entry is `Skipped` with a reason — *before* anything is
+///    closed or launched. Dependencies on disabled or unselected entries count as satisfied.
+/// 3. Replace mode: gracefully close the `close_window_ids` that still exist (never kill, never
+///    Reframe's own windows), wait up to `timing.close_wait`, and report each window
+///    (`WindowCloseUpdated`: Requested → Closed / StillOpen / Failed). Then restore as Merge.
+/// 4. Merge/Replace: entries already satisfied by running windows ([`matcher`]) are not
+///    relaunched; their windows are arranged per the saved snapshots (when positions are
+///    enabled) and the entry completes ("Already running - arranged windows"). Additive:
+///    everything launches.
+/// 5. Validate each entry when it becomes ready (adapter launch plan, programs and working
+///    folders exist), then launch it on a worker thread: at most `max_parallel` entries at a
+///    time, launch starts staggered by `launch_delay_ms`, an entry only after all its planned
+///    dependencies completed (fully or partially) plus their `delay_after_launch_ms`, and
+///    entries of the same application one after another. Failed launch steps are retried up
+///    to `retry_count` times with a short backoff. Dependents of failed or skipped entries are
+///    `Skipped`; unrelated entries continue.
+/// 6. New windows are claimed through a shared claim set (concurrent entries never take the
+///    same window) when they belong to the entry's application (launched process tree,
+///    adapter identification, executable). The worker waits until the windows the launch
+///    steps expect appeared — then up to `timing.settle` longer while saved windows are still
+///    unmatched — or until the entry's timeout, matches them to the saved `WindowSnapshot`s
+///    and applies their monitor-remapped placement. Missing windows or placement errors make
+///    the entry `PartiallyCompleted` with a precise message; launch failures make it `Failed`.
+/// 7. `cancel` is checked between steps and while waiting: entries not launched yet are
+///    `Skipped "Restore cancelled"`, the run ends `Cancelled`. Otherwise the final status is
+///    [`RestoreRun::summarize`].
+///
+/// Never panics (internal errors fail the remaining entries), never holds a lock while
+/// sleeping and never blocks forever: every wait is bounded by a timeout, and user-provided
+/// timeouts and delays are capped (see [`orchestrator`]).
 pub fn execute(
-    _env: &RestoreEnv,
+    env: &RestoreEnv,
     workspace: &Workspace,
     options: RestoreOptions,
-    _cancel: &AtomicBool,
+    cancel: &AtomicBool,
     emit: &EventSink,
 ) -> RestoreRun {
-    let run = RestoreRun {
-        id: options.run_id,
-        workspace_id: workspace.id,
-        workspace_name: workspace.name.clone(),
-        mode: options.mode,
-        status: RunStatus::Failed,
-        started_at: Utc::now(),
-        finished_at: Some(Utc::now()),
-        entries: Vec::new(),
-        closed_windows: Vec::new(),
-        messages: vec!["The restoration engine is not implemented yet.".to_string()],
-    };
-    emit(RestoreEvent::RunFinished { run: run.clone() });
-    run
+    orchestrator::run(env, workspace, options, cancel, emit)
 }
