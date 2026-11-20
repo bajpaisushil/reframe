@@ -13,7 +13,9 @@ use reframe_core::ReframeService;
 use reframe_core::database::Database;
 use reframe_core::model::*;
 use reframe_core::restoration::RestoreTiming;
-use reframe_platform::{LaunchRequest, Platform, Rect, WindowId, WindowInfo, WindowPlacement, WindowState};
+use reframe_platform::{
+    LaunchRequest, Platform, Rect, WindowId, WindowInfo, WindowPlacement, WindowState,
+};
 
 fn enabled() -> bool {
     std::env::var("REFRAME_E2E_X11").as_deref() == Ok("1") && std::env::var_os("DISPLAY").is_some()
@@ -49,11 +51,13 @@ fn which(name: &str) -> PathBuf {
 }
 
 fn service(platform: Arc<dyn Platform>) -> ReframeService {
-    ReframeService::new(platform, Database::open_in_memory().unwrap(), "e2e").with_timing(RestoreTiming {
-        poll_interval: Duration::from_millis(100),
-        settle: Duration::from_millis(800),
-        close_wait: Duration::from_secs(5),
-    })
+    ReframeService::new(platform, Database::open_in_memory().unwrap(), "e2e").with_timing(
+        RestoreTiming {
+            poll_interval: Duration::from_millis(100),
+            settle: Duration::from_millis(800),
+            close_wait: Duration::from_secs(5),
+        },
+    )
 }
 
 /// Tests share one X display; run them one at a time.
@@ -84,18 +88,34 @@ fn round_trip(specs: &[(&str, Rect)]) {
     // 1. Real windows with fixed titles (allowTitleOps off so the shell cannot rename them).
     for (title, _) in specs {
         platform
-            .launch(&LaunchRequest::executable(&xterm).with_args(["-T", title, "-xrm", "XTerm*allowTitleOps: false"]))
+            .launch(&LaunchRequest::executable(&xterm).with_args([
+                "-T",
+                title,
+                "-xrm",
+                "XTerm*allowTitleOps: false",
+            ]))
             .expect("launch xterm");
     }
     let originals: Vec<WindowInfo> = wait_for(Duration::from_secs(15), || {
         let ws = platform.windows().ok()?;
-        specs.iter().map(|(t, _)| ws.iter().find(|w| w.title == *t).cloned()).collect()
+        specs
+            .iter()
+            .map(|(t, _)| ws.iter().find(|w| w.title == *t).cloned())
+            .collect()
     })
     .expect("all xterm windows appear");
 
     // 2. Arrange them at known places.
     for (w, (_, rect)) in originals.iter().zip(specs) {
-        platform.set_window_placement(&w.id, &WindowPlacement { bounds: *rect, state: WindowState::Normal }).unwrap();
+        platform
+            .set_window_placement(
+                &w.id,
+                &WindowPlacement {
+                    bounds: *rect,
+                    state: WindowState::Normal,
+                },
+            )
+            .unwrap();
     }
     wait_for(Duration::from_secs(5), || {
         let ws = platform.windows().ok()?;
@@ -122,17 +142,34 @@ fn round_trip(specs: &[(&str, Rect)]) {
             description: String::new(),
             icon: "🧪".into(),
             color: None,
-            selections: vec![CaptureSelection { app_key: app.key.clone(), window_ids: window_ids.clone() }],
+            selections: vec![CaptureSelection {
+                app_key: app.key.clone(),
+                window_ids: window_ids.clone(),
+            }],
         })
         .expect("capture workspace");
     let ws = captured.workspace;
-    assert_eq!(ws.applications.len(), 1, "one application captured: {ws:#?}");
+    assert_eq!(
+        ws.applications.len(),
+        1,
+        "one application captured: {ws:#?}"
+    );
     let entry = &ws.applications[0];
-    assert_eq!(entry.windows.len(), specs.len(), "all windows captured: {entry:#?}");
+    assert_eq!(
+        entry.windows.len(),
+        specs.len(),
+        "all windows captured: {entry:#?}"
+    );
     for saved in &entry.windows {
-        assert!(specs.iter().any(|(_, r)| near(saved.bounds, *r, 8)), "saved geometry {saved:?}");
+        assert!(
+            specs.iter().any(|(_, r)| near(saved.bounds, *r, 8)),
+            "saved geometry {saved:?}"
+        );
     }
-    assert!(svc.list_workspaces().unwrap().iter().any(|s| s.id == ws.id), "workspace persisted");
+    assert!(
+        svc.list_workspaces().unwrap().iter().any(|s| s.id == ws.id),
+        "workspace persisted"
+    );
 
     // 4. Close the originals gracefully and wait until they are gone.
     for id in &window_ids {
@@ -143,13 +180,23 @@ fn round_trip(specs: &[(&str, Rect)]) {
         (!ws.iter().any(|w| window_ids.contains(&w.id))).then_some(())
     })
     .expect("original windows closed");
-    let before: Vec<WindowId> = platform.windows().unwrap().into_iter().map(|w| w.id).collect();
+    let before: Vec<WindowId> = platform
+        .windows()
+        .unwrap()
+        .into_iter()
+        .map(|w| w.id)
+        .collect();
 
     // 5. Restore and collect progress events.
     let events: Arc<Mutex<Vec<RestoreEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let sink_events = Arc::clone(&events);
     svc.start_restore(
-        RestoreRequest { workspace_id: ws.id, mode: SwitchMode::Merge, entry_ids: None, close_window_ids: vec![] },
+        RestoreRequest {
+            workspace_id: ws.id,
+            mode: SwitchMode::Merge,
+            entry_ids: None,
+            close_window_ids: vec![],
+        },
         Arc::new(move |e| sink_events.lock().unwrap().push(e)),
     )
     .expect("start restore");
@@ -162,8 +209,14 @@ fn round_trip(specs: &[(&str, Rect)]) {
     .expect("restore finished");
     {
         let events = events.lock().unwrap();
-        assert!(matches!(events.first(), Some(RestoreEvent::RunStarted { .. })), "RunStarted comes first");
-        assert!(matches!(events.last(), Some(RestoreEvent::RunFinished { .. })), "RunFinished comes last");
+        assert!(
+            matches!(events.first(), Some(RestoreEvent::RunStarted { .. })),
+            "RunStarted comes first"
+        );
+        assert!(
+            matches!(events.last(), Some(RestoreEvent::RunFinished { .. })),
+            "RunFinished comes last"
+        );
     }
     eprintln!("restore run: {:?} {:#?}", run.status, run.entries);
 
@@ -172,20 +225,30 @@ fn round_trip(specs: &[(&str, Rect)]) {
         .windows()
         .unwrap()
         .into_iter()
-        .filter(|w| !before.contains(&w.id) && w.class_name.as_deref().is_some_and(|c| c.eq_ignore_ascii_case("xterm")))
+        .filter(|w| {
+            !before.contains(&w.id)
+                && w.class_name
+                    .as_deref()
+                    .is_some_and(|c| c.eq_ignore_ascii_case("xterm"))
+        })
         .collect();
     for w in &restored {
         eprintln!("restored window {:?} {:?} {:?}", w.title, w.bounds, w.state);
     }
     let all_back = restored.len() == specs.len()
-        && specs.iter().all(|(_, target)| restored.iter().any(|w| near(w.bounds, *target, 12)));
+        && specs
+            .iter()
+            .all(|(_, target)| restored.iter().any(|w| near(w.bounds, *target, 12)));
 
     // Clean up before asserting so a failure doesn't leave windows behind for the next test.
     for w in &restored {
         let _ = platform.close_window(&w.id);
     }
     assert_eq!(run.status, RunStatus::Completed, "run: {run:#?}");
-    assert!(all_back, "every window was restored at its saved position: {restored:#?}");
+    assert!(
+        all_back,
+        "every window was restored at its saved position: {restored:#?}"
+    );
     assert_eq!(svc.active_workspace().unwrap(), Some(ws.id));
     assert!(svc.get_workspace(ws.id).unwrap().last_restored_at.is_some());
 }

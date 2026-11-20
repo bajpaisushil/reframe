@@ -35,6 +35,7 @@ pub mod sanitize;
 
 mod command;
 mod paths;
+pub(crate) use paths::is_network_path;
 mod secrets;
 mod validate;
 

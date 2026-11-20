@@ -3,6 +3,8 @@
 
 use std::path::Path;
 
+use crate::portability::is_network_path;
+
 use reframe_platform::common::locate;
 use reframe_platform::{LaunchRequest, LaunchTarget, LocateQuery};
 
@@ -20,7 +22,9 @@ pub(crate) fn executable_exists(path: &Path) -> bool {
     if path.as_os_str().is_empty() {
         return false;
     }
-    if path.exists() {
+    // Never probe network locations (on Windows that sends the user's credentials); the OS
+    // reports a clear error at launch if the program is really missing.
+    if is_network_path(path) || path.exists() {
         return true;
     }
     let bare_name = !path.is_absolute() && path.components().count() == 1;
@@ -45,12 +49,14 @@ pub(crate) fn check_target(target: &LaunchTarget, app: &str) -> Result<(), Strin
             }
         }
         LaunchTarget::Package { package } => match &package.path {
-            Some(path) if !path.exists() => Err(not_installed_message(app, path)),
+            Some(path) if !is_network_path(path) && !path.exists() => {
+                Err(not_installed_message(app, path))
+            }
             _ => Ok(()),
         },
         LaunchTarget::Open { target } => {
             let path = Path::new(target);
-            if path.is_absolute() && !path.exists() {
+            if path.is_absolute() && !is_network_path(path) && !path.exists() {
                 Err(format!(
                     "{target} no longer exists, so {app} cannot open it - edit the application"
                 ))
@@ -64,7 +70,7 @@ pub(crate) fn check_target(target: &LaunchTarget, app: &str) -> Result<(), Strin
 /// Check the working folder of a launch request.
 pub(crate) fn check_working_directory(request: &LaunchRequest, app: &str) -> Result<(), String> {
     match &request.working_directory {
-        Some(dir) if !dir.is_dir() => Err(format!(
+        Some(dir) if !is_network_path(dir) && !dir.is_dir() => Err(format!(
             "{app}'s working folder {} no longer exists - edit the application to choose another one",
             dir.display()
         )),

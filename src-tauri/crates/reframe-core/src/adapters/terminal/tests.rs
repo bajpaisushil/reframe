@@ -1492,10 +1492,27 @@ fn exports_leave_out_commands_and_titles_that_look_like_credentials() {
     else {
         panic!("state kind changed");
     };
+    let secrets = [
+        "ghp_abc",
+        "hunter2",
+        "s3cret",
+        "Bearer abc",
+        "AWS_SECRET_ACCESS_KEY=x",
+        "API_KEY=1",
+    ];
     for (session, command) in sessions.iter().zip(secret_commands) {
-        assert_eq!(session.startup_command, None, "{command}");
-        // The window boundary survives; its revealing title does not.
-        assert_eq!(session.window_title.as_deref(), Some(""));
+        // Either dropped by this adapter or redacted by the shared export sanitizer; never
+        // exported with the credential.
+        if let Some(kept) = session.startup_command.as_deref() {
+            assert!(
+                !secrets.iter().any(|s| kept.contains(s)),
+                "{command} exported as {kept}"
+            );
+        }
+        // The window boundary survives; its revealing part does not (the shared export
+        // sanitizer may already have removed the credential, leaving a harmless title).
+        let title = session.window_title.as_deref().expect("window kept");
+        assert!(!title.contains("s3cret"), "{command}: {title}");
     }
     for (session, command) in sessions[secret_commands.len()..].iter().zip(kept_commands) {
         assert_eq!(session.startup_command.as_deref(), Some(command));

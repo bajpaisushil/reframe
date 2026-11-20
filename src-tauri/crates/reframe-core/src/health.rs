@@ -11,6 +11,7 @@ use crate::model::{
     ApplicationEntry, CapabilityLevel, DesktopState, EntryHealth, RestoreEstimate, Workspace,
     WorkspaceHealth,
 };
+use crate::portability::is_network_path;
 use crate::restoration::{layout, planner, reuse, validate};
 
 /// How ready `workspace` is to be restored on this machine, given a fresh desktop `state`.
@@ -131,11 +132,27 @@ fn entry_health(
         }
     }
 
+    // Network locations (\\server\share, /net/...) are never probed: on Windows merely
+    // checking one sends the user's credentials to that server, and imported workspaces are
+    // untrusted. They are reported as unchecked instead.
     let mut missing_paths: Vec<PathBuf> = Vec::new();
+    let mut network_paths = 0usize;
     for path in entry.state.paths() {
-        if !path.as_os_str().is_empty() && !path.exists() && !missing_paths.contains(&path) {
+        if path.as_os_str().is_empty() || missing_paths.contains(&path) {
+            continue;
+        }
+        if is_network_path(&path) {
+            network_paths += 1;
+        } else if !path.exists() {
             missing_paths.push(path);
         }
+    }
+    if network_paths > 0 {
+        issues.push(format!(
+            "{network_paths} saved location{} on another computer {} not checked",
+            if network_paths == 1 { "" } else { "s" },
+            if network_paths == 1 { "was" } else { "were" }
+        ));
     }
     match missing_paths.as_slice() {
         [] => {}
@@ -146,6 +163,7 @@ fn entry_health(
         )),
     }
     if let Some(dir) = &entry.launch.working_directory
+        && !is_network_path(dir)
         && !dir.is_dir()
         && !missing_paths.contains(dir)
     {
@@ -300,6 +318,47 @@ mod tests {
             state: WindowState::Normal,
             monitor_id: Some("MOCK-1".into()),
         }
+    }
+
+    #[test]
+    fn network_locations_are_never_probed_and_reported_as_unchecked() {
+        let platform = MockPlatform::new();
+        let dir = tempfile::tempdir().unwrap();
+        let editor_exe = dir.path().join("editor");
+        std::fs::write(&editor_exe, "#!/bin/sh\n").unwrap();
+        let mut editor = ApplicationEntry::new("exe:editor", "Editor", "projects-test");
+        editor.launch.executable = Some(editor_exe);
+        editor.launch.working_directory = Some(PathBuf::from(r"\\attacker\share\work"));
+        editor.state = AppState::Projects {
+            projects: vec![
+                ProjectRef {
+                    path: PathBuf::from(r"\\attacker\share\project"),
+                    is_workspace_file: false,
+                    window_title: None,
+                },
+                ProjectRef {
+                    path: PathBuf::from("//attacker/share/other"),
+                    is_workspace_file: false,
+                    window_title: None,
+                },
+            ],
+        };
+        let mut ws = Workspace::new("Imported", "📦");
+        ws.applications = vec![editor];
+        let health = workspace_health(&ws, &state(&platform), &platform, &adapters());
+        let entry = &health.entries[0];
+        assert!(
+            entry.missing_paths.is_empty(),
+            "network paths are not reported missing: {entry:?}"
+        );
+        assert!(
+            entry
+                .issues
+                .iter()
+                .any(|i| i.contains("2 saved locations on another computer were not checked")),
+            "{:?}",
+            entry.issues
+        );
     }
 
     #[test]
