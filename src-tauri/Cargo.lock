@@ -3189,6 +3189,7 @@ dependencies = [
  "ts-rs",
  "url",
  "uuid",
+ "windows",
 ]
 
 [[package]]

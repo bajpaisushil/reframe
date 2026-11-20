@@ -20,6 +20,16 @@ url = "2"
 dirs = "7"
 base64 = "0.23"
 
+# File Explorer integration (adapters/file_manager/explorer.rs): the shell's window list.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Ole",
+  "Win32_System_Variant",
+  "Win32_UI_Shell",
+] }
+
 [dev-dependencies]
 reframe-platform = { workspace = true, features = ["mock"] }
 tempfile = "3"

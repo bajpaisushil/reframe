@@ -105,6 +105,15 @@ pub trait AppAdapter: Send + Sync {
     /// What this adapter can restore on `info`'s platform.
     fn capability(&self, info: &PlatformInfo) -> AdapterCapability;
 
+    /// What this adapter can restore for one of its applications (`app_id`, as returned by
+    /// [`AppAdapter::identify`]) on `info`'s platform. Adapters whose applications differ (PDF
+    /// readers with and without page support, Spotify vs. other music players) override this;
+    /// the default is the adapter-wide [`AppAdapter::capability`].
+    fn capability_for_app(&self, app_id: &str, info: &PlatformInfo) -> AdapterCapability {
+        let _ = app_id;
+        self.capability(info)
+    }
+
     /// Extract restorable state. Must degrade gracefully: on failure return
     /// `AppState::None` (or partial state) plus a warning, never panic.
     fn capture(&self, ctx: &CaptureContext<'_>, input: &CaptureInput<'_>) -> CaptureOutput;
