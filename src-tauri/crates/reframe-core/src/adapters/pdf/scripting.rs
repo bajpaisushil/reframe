@@ -5,7 +5,7 @@
 //! or when the reader does not answer within a few seconds, a warning is reported and documents
 //! come only from window titles and the command line. Preview does not expose the current page.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::adapters::file_manager::support;
@@ -88,9 +88,10 @@ pub(super) fn parse_output(raw: &str) -> Vec<ScriptedDocument> {
         .collect()
 }
 
-/// Documents shown in the selected windows (`titles`): those whose file name appears in a
-/// title. When some selected window matches no document (its title may show the document's
-/// own title instead), the unmatched documents are kept too, so nothing visible is lost.
+/// Documents shown in the selected windows (`titles`): those whose file name a title names
+/// (see [`super::titles::document_candidates`]). When some selected window matches no
+/// document (its title may show the document's own title instead), the unmatched documents are
+/// kept too, so nothing visible is lost.
 pub(super) fn select_for_windows<'a>(
     documents: &'a [ScriptedDocument],
     titles: &[&str],
@@ -104,9 +105,14 @@ pub(super) fn select_for_windows<'a>(
             .map(|n| n.to_string_lossy().to_lowercase())
             .unwrap_or_default()
     };
+    // A document is shown when its file name is one the title names (not merely a substring of
+    // the title: "data.pdf" does not show "a.pdf").
     let shows = |title: &str, doc: &ScriptedDocument| {
         let name = name_of(doc);
-        !name.is_empty() && title.to_lowercase().contains(&name)
+        !name.is_empty()
+            && super::titles::document_candidates(title)
+                .iter()
+                .any(|candidate| support::display_name(Path::new(candidate)).to_lowercase() == name)
     };
     let matched: Vec<bool> = documents
         .iter()
@@ -160,6 +166,16 @@ mod tests {
         assert_eq!(
             select_for_windows(&docs, &["ONE.PDF (page 2 of 9)"]),
             vec![&docs[0]]
+        );
+        // "data.pdf" contains "a.pdf", but only the document named "data.pdf" is shown.
+        let similar = vec![doc("/a/a.pdf", None), doc("/a/data.pdf", None)];
+        assert_eq!(
+            select_for_windows(&similar, &["data.pdf"]),
+            vec![&similar[1]]
+        );
+        assert_eq!(
+            select_for_windows(&similar, &["*a.pdf — Edited", "/a/data.pdf"]),
+            vec![&similar[0], &similar[1]]
         );
     }
 

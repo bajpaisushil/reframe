@@ -48,6 +48,8 @@ use crate::util;
 const MAX_DOCUMENTS: usize = 50;
 /// Larger page numbers are treated as invalid.
 const MAX_PAGE: u32 = 1_000_000;
+/// macOS `open`, which hands documents to an application as "open document" events.
+const MACOS_OPEN: &str = "/usr/bin/open";
 
 const APPS: &[KnownApp] = &[
     KnownApp::new("sumatrapdf", "SumatraPDF")
@@ -361,7 +363,16 @@ impl AppAdapter for PdfAdapter {
         };
         let target = launch_target(ctx.info.os, entry)
             .ok_or_else(|| format!("No executable is configured for {}.", entry.display_name))?;
-        let via_open = matches!(&target, LaunchTarget::Package { package } if package.kind == PackageKind::MacBundle);
+        // macOS readers get their documents through `open -b <bundle> <file>`: launching the
+        // bundle with the file as an argument starts a new instance whose AppKit code ignores it.
+        let bundle = match &target {
+            LaunchTarget::Package { package }
+                if package.kind == PackageKind::MacBundle && is_bundle_id(&package.id) =>
+            {
+                Some(package.id.as_str())
+            }
+            _ => None,
+        };
         let request = |args: Vec<String>| LaunchRequest {
             target: target.clone(),
             args,
@@ -381,15 +392,18 @@ impl AppAdapter for PdfAdapter {
             .into_iter()
             .enumerate()
             .map(|(index, document)| {
-                let mut args = entry.launch.arguments.clone();
-                args.extend(document_args(
-                    &entry.app_id,
-                    &document.path,
-                    document.page,
-                    via_open,
-                ));
+                let request = match bundle {
+                    Some(bundle) => {
+                        open_document_request(bundle, &document.path, &entry.launch.arguments)
+                    }
+                    None => {
+                        let mut args = entry.launch.arguments.clone();
+                        args.extend(document_args(&entry.app_id, &document.path, document.page));
+                        request(args)
+                    }
+                };
                 LaunchStep {
-                    request: request(args),
+                    request,
                     expected_windows: if tabs && index > 0 { 0 } else { 1 },
                     title_hint: Some(support::display_name(&document.path)),
                 }
@@ -433,8 +447,9 @@ impl AppAdapter for PdfAdapter {
     }
 }
 
-/// On macOS, readers are started through `open` with their bundle id, so documents arrive as
-/// "open document" events (bundle executables ignore file arguments).
+/// On macOS, readers are started through their bundle id (documents are then opened with
+/// [`open_document_request`], as "open document" events: bundle executables ignore file
+/// arguments).
 fn launch_target(os: OsKind, entry: &ApplicationEntry) -> Option<LaunchTarget> {
     if os == OsKind::Macos {
         if let Some(package) = entry
@@ -462,13 +477,42 @@ fn launch_target(os: OsKind, entry: &ApplicationEntry) -> Option<LaunchTarget> {
     generic::launch_target(&entry.launch)
 }
 
-/// Arguments that open `path` (at `page` where the reader supports it).
-fn document_args(app_id: &str, path: &Path, page: Option<u32>, via_open: bool) -> Vec<String> {
-    let file = path.display().to_string();
-    if via_open {
-        // `open -b <bundle> <file>` passes documents only.
-        return vec![file];
+/// `open -b <bundle> <file>` (macOS): the document reaches the running reader, or a newly started
+/// one, as an "open document" event. Pages cannot be passed this way; user arguments go to the
+/// application after `--args`.
+fn open_document_request(bundle: &str, path: &Path, user_args: &[String]) -> LaunchRequest {
+    let mut args = vec![
+        "-b".to_string(),
+        bundle.to_string(),
+        path.display().to_string(),
+    ];
+    if !user_args.is_empty() {
+        args.push("--args".to_string());
+        args.extend(user_args.iter().cloned());
     }
+    LaunchRequest {
+        target: LaunchTarget::Executable {
+            path: PathBuf::from(MACOS_OPEN),
+        },
+        args,
+        // `open` hands the document to Launch Services; a working directory means nothing there.
+        working_directory: None,
+        env: Vec::new(),
+    }
+}
+
+/// A plausible macOS bundle identifier (`com.apple.Preview`): never empty, never an option.
+fn is_bundle_id(id: &str) -> bool {
+    (1..=255).contains(&id.len())
+        && !id.starts_with(['-', '.'])
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
+/// Arguments that open `path` (at `page` where the reader supports it).
+fn document_args(app_id: &str, path: &Path, page: Option<u32>) -> Vec<String> {
+    let file = path.display().to_string();
     match (app_id, page.filter(|p| (1..=MAX_PAGE).contains(p))) {
         ("sumatrapdf", Some(page)) => vec!["-page".into(), page.to_string(), file],
         ("acrobat", Some(page)) => vec!["/A".into(), format!("page={page}"), file],
@@ -572,22 +616,26 @@ fn absolute_path(candidate: &str, home: Option<&Path>) -> Option<PathBuf> {
     path.is_absolute().then_some(path)
 }
 
-/// The single path whose file name is `name` (exact match first, then ignoring case).
+/// The single path whose file name is `name` (exact match first, then ignoring case). The same
+/// path listed twice (command line and AppleScript) counts once.
 fn unique_by_name(paths: &[PathBuf], name: &str) -> Option<PathBuf> {
-    let exact: Vec<&PathBuf> = paths
-        .iter()
-        .filter(|p| support::display_name(p) == name)
-        .collect();
+    let matching = |matches: &dyn Fn(&str) -> bool| {
+        let mut found: Vec<&PathBuf> = Vec::new();
+        for path in paths {
+            if matches(&support::display_name(path)) && !found.contains(&path) {
+                found.push(path);
+            }
+        }
+        found
+    };
+    let exact = matching(&|file_name| file_name == name);
     match exact.as_slice() {
         [only] => return Some((*only).clone()),
         [] => {}
         _ => return None,
     }
     let lower = name.to_lowercase();
-    let loose: Vec<&PathBuf> = paths
-        .iter()
-        .filter(|p| support::display_name(p).to_lowercase() == lower)
-        .collect();
+    let loose = matching(&|file_name| file_name.to_lowercase() == lower);
     match loose.as_slice() {
         [only] => Some((*only).clone()),
         _ => None,
@@ -830,11 +878,64 @@ mod tests {
     }
 
     #[test]
-    fn macos_readers_open_documents_through_their_bundle() {
+    fn macos_readers_open_documents_through_open_with_their_bundle() {
+        // A Package launch is `open -n -b <bundle> --args …` on macOS: a new reader instance per
+        // document, with the file as a command-line argument that AppKit readers ignore. Documents
+        // must be handed over as "open document" events: `open -b <bundle> <file>`.
         let d = docs();
+        let open = LaunchTarget::Executable {
+            path: PathBuf::from("/usr/bin/open"),
+        };
         let mut e = entry("preview", &[(&d.a, None)]);
         e.launch.executable = None;
+        e.launch.working_directory = Some(PathBuf::from("/definitely/missing"));
         let steps = plan(OsKind::Macos, &e).unwrap();
+        assert_eq!(steps[0].request.target, open);
+        assert_eq!(
+            steps[0].request.args,
+            vec![
+                "-b".to_string(),
+                "com.apple.Preview".into(),
+                d.a.display().to_string()
+            ]
+        );
+        assert_eq!(steps[0].request.working_directory, None);
+        assert_eq!(steps[0].title_hint.as_deref(), Some("alpha.pdf"));
+
+        // The captured bundle wins; Skim's page cannot be passed; user arguments go to the app.
+        let captured = PackageInfo {
+            kind: PackageKind::MacBundle,
+            id: "net.sourceforge.skim-app.skim".into(),
+            path: Some("/Applications/Skim.app".into()),
+        };
+        let mut e = entry("skim", &[(&d.a, Some(4)), (&d.b, None)]);
+        e.launch.package = Some(captured.clone());
+        e.launch.arguments = vec!["--user-flag".into()];
+        let steps = plan(OsKind::Macos, &e).unwrap();
+        assert_eq!(steps.len(), 2);
+        assert!(steps.iter().all(|s| s.request.target == open));
+        assert_eq!(
+            args(&steps),
+            vec![
+                vec![
+                    "-b".to_string(),
+                    "net.sourceforge.skim-app.skim".into(),
+                    d.a.display().to_string(),
+                    "--args".into(),
+                    "--user-flag".into(),
+                ],
+                vec![
+                    "-b".to_string(),
+                    "net.sourceforge.skim-app.skim".into(),
+                    d.b.display().to_string(),
+                    "--args".into(),
+                    "--user-flag".into(),
+                ],
+            ]
+        );
+
+        // Nothing left to reopen: the reader starts through its bundle.
+        let steps = plan(OsKind::Macos, &entry("preview", &[(&d.missing, None)])).unwrap();
         assert_eq!(
             steps[0].request.target,
             LaunchTarget::Package {
@@ -845,21 +946,48 @@ mod tests {
                 }
             }
         );
-        assert_eq!(steps[0].request.args, vec![d.a.display().to_string()]);
+        assert!(steps[0].request.args.is_empty());
 
-        let captured = PackageInfo {
+        // A captured "bundle id" that is not one is never handed to `open`.
+        let mut e = entry("preview", &[(&d.a, None)]);
+        e.launch.package = Some(PackageInfo {
             kind: PackageKind::MacBundle,
-            id: "net.sourceforge.skim-app.skim".into(),
-            path: Some("/Applications/Skim.app".into()),
-        };
-        let mut e = entry("skim", &[(&d.a, Some(4))]);
-        e.launch.package = Some(captured.clone());
+            id: "-a".into(),
+            path: None,
+        });
         let steps = plan(OsKind::Macos, &e).unwrap();
-        assert_eq!(
-            steps[0].request.target,
-            LaunchTarget::Package { package: captured }
+        assert_ne!(steps[0].request.target, open);
+    }
+
+    #[test]
+    fn documents_named_like_flags_stay_absolute_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let flag = dir.path().join("-rf.pdf");
+        std::fs::write(&flag, b"%PDF").unwrap();
+        for (os, app) in [
+            (OsKind::Linux, "okular"),
+            (OsKind::Windows, "sumatrapdf"),
+            (OsKind::Macos, "preview"),
+        ] {
+            let steps = plan(os, &entry(app, &[(&flag, Some(2))])).unwrap();
+            let last = steps[0].request.args.last().unwrap();
+            assert_eq!(last, &flag.display().to_string(), "{app}");
+            assert!(!last.starts_with('-'), "{app}");
+        }
+        // A relative "-rf.pdf" (e.g. from an edited workspace) is never passed at all.
+        let mut relative = entry("okular", &[]);
+        relative.state = AppState::Documents {
+            documents: vec![DocumentRef {
+                path: PathBuf::from("-rf.pdf"),
+                page: None,
+            }],
+        };
+        assert!(
+            plan(OsKind::Linux, &relative).unwrap()[0]
+                .request
+                .args
+                .is_empty()
         );
-        assert_eq!(steps[0].request.args, vec![d.a.display().to_string()]);
     }
 
     #[test]
@@ -1114,6 +1242,10 @@ mod tests {
         assert_eq!(unique_by_name(&paths, "NOTES.PDF"), Some(paths[2].clone()));
         assert_eq!(unique_by_name(&paths, "REPORT.PDF"), None);
         assert_eq!(unique_by_name(&paths, "missing.pdf"), None);
+        // The same document known twice (command line and AppleScript) is still one match.
+        let twice = vec![paths[2].clone(), paths[0].clone(), paths[2].clone()];
+        assert_eq!(unique_by_name(&twice, "notes.pdf"), Some(paths[2].clone()));
+        assert_eq!(unique_by_name(&twice, "Notes.PDF"), Some(paths[2].clone()));
         assert_eq!(
             absolute_path("~/x.pdf", Some(Path::new("/home/me"))),
             Some(PathBuf::from("/home/me/x.pdf"))

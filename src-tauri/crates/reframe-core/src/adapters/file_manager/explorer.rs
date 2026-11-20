@@ -9,11 +9,13 @@
 //!
 //! Limitations: special locations (This PC, Home/Quick access, Recycle Bin, libraries, search
 //! results, Control Panel) have no file-system path and are skipped with a warning. Each
-//! Windows 11 tab is captured as its own folder and reopens as a separate window.
+//! Windows 11 tab is captured as its own folder and reopens as a separate window. Folders that
+//! cannot be checked in time (a disconnected network drive) are skipped with a warning.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-#[cfg(windows)]
-use std::time::Duration;
+use std::sync::{Arc, mpsc};
+use std::time::{Duration, Instant};
 
 use reframe_platform::WindowInfo;
 
@@ -25,6 +27,10 @@ const FOLDER_WINDOW_CLASSES: &[&str] = &["CabinetWClass", "ExploreWClass"];
 /// How long to wait for Explorer to answer the shell-window query.
 #[cfg(windows)]
 const SHELL_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// How long checking which of the shown locations are folders may take in total: checking a
+/// disconnected network drive can block for tens of seconds.
+const FOLDER_CHECK_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Explorer folder windows. explorer.exe also owns the taskbar, the desktop and other shell UI,
 /// which are not file-manager windows.
@@ -51,9 +57,87 @@ pub(super) fn capture(windows: &[&WindowInfo]) -> (Vec<FolderRef>, Vec<String>) 
         return (Vec::new(), Vec::new());
     }
     let shell = shell_windows();
-    folders_for_windows(windows, shell, &|candidate: &str| {
-        Path::new(candidate).is_dir()
-    })
+    let candidates = candidate_paths(windows, shell.as_deref().unwrap_or_default());
+    let (existing, unanswered) =
+        existing_folders(candidates, FOLDER_CHECK_TIMEOUT, |candidate: &str| {
+            Path::new(candidate).is_dir()
+        });
+    let (folders, mut warnings) = folders_for_windows(windows, shell, &|candidate: &str| {
+        existing.contains(candidate)
+    });
+    if unanswered > 0 {
+        warnings.push(format!(
+            "{unanswered} location(s) could not be checked in time (an unresponsive network \
+             drive?); the windows showing them were skipped."
+        ));
+    }
+    (folders, warnings)
+}
+
+/// Every path the selected windows may show: the locations of their shell entries and their
+/// full-path titles, sorted and without duplicates.
+fn candidate_paths(windows: &[&WindowInfo], shell: &[ShellWindow]) -> Vec<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    for window in windows {
+        if let Some(hwnd) = parse_hwnd(window.id.as_str()) {
+            for entry in shell.iter().filter(|s| same_hwnd(s.hwnd, hwnd)) {
+                candidates.extend(file_url_candidates(&entry.location_url));
+            }
+        }
+        candidates.extend(title_path_candidates(&window.title));
+    }
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+/// Which `candidates` are existing folders according to `is_dir`. Every check runs on its own
+/// helper thread and all share one deadline, so a check that blocks (a disconnected network
+/// drive) neither hangs capture nor holds up the checks of other folders. Returns the existing
+/// folders and the number of checks that did not answer in time; those helpers finish in the
+/// background and their results are discarded.
+fn existing_folders<F>(
+    candidates: Vec<String>,
+    timeout: Duration,
+    is_dir: F,
+) -> (HashSet<String>, usize)
+where
+    F: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let deadline = Instant::now() + timeout;
+    let is_dir = Arc::new(is_dir);
+    let pending: Vec<(String, Option<mpsc::Receiver<bool>>)> = candidates
+        .into_iter()
+        .map(|candidate| {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            let check = Arc::clone(&is_dir);
+            let path = candidate.clone();
+            let spawned = std::thread::Builder::new()
+                .name("reframe-folder-check".to_string())
+                .spawn(move || {
+                    // After the deadline nobody listens any more; dropping the result is intended.
+                    let _ = sender.send(check(&path));
+                });
+            (candidate, spawned.ok().map(|_| receiver))
+        })
+        .collect();
+    let mut existing = HashSet::new();
+    let mut unanswered = 0;
+    for (candidate, receiver) in pending {
+        let answer = receiver.and_then(|receiver| {
+            receiver
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .ok()
+        });
+        match answer {
+            Some(true) => {
+                existing.insert(candidate);
+            }
+            Some(false) => {}
+            None => unanswered += 1,
+        }
+    }
+    (existing, unanswered)
 }
 
 /// The shell's window list.
@@ -595,6 +679,62 @@ mod tests {
         assert_eq!(folders[0].path, PathBuf::from(r"C:\Repo"));
         assert_eq!(warnings.len(), 2);
         assert!(warnings[0].contains("COM failed"));
+    }
+
+    #[test]
+    fn folder_checks_share_one_deadline() {
+        // A disconnected network drive can block a folder check for tens of seconds: such checks
+        // are abandoned at the deadline, while local folders are still found.
+        let start = std::time::Instant::now();
+        let (existing, unanswered) = existing_folders(
+            vec![
+                r"C:\Work".to_string(),
+                r"\\nas\gone".to_string(),
+                r"C:\Missing".to_string(),
+                r"\\nas\gone too".to_string(),
+            ],
+            Duration::from_millis(300),
+            |candidate: &str| {
+                if candidate.starts_with(r"\\nas") {
+                    std::thread::sleep(Duration::from_secs(3));
+                }
+                candidate == r"C:\Work"
+            },
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(existing, HashSet::from([r"C:\Work".to_string()]));
+        assert_eq!(unanswered, 2);
+        assert_eq!(
+            existing_folders(Vec::new(), Duration::from_millis(1), |_: &str| true),
+            (HashSet::new(), 0)
+        );
+    }
+
+    #[test]
+    fn candidates_come_from_matching_shell_entries_and_titles() {
+        let w1 = window(
+            "0xA1",
+            1,
+            "Downloads - File Explorer",
+            Some("CabinetWClass"),
+        );
+        let w2 = window("0xB2", 1, r"C:\Repo - File Explorer", Some("CabinetWClass"));
+        let shell = [
+            shell(0xA1, "file:///C:/Users/me/Downloads"),
+            shell(0xF6, "file:///C:/Not/Selected"),
+        ];
+        assert_eq!(
+            candidate_paths(&[&w1, &w2], &shell),
+            vec![
+                r"C:\Repo".to_string(),
+                r"C:\Repo - File Explorer".to_string(),
+                r"C:\Users\me\Downloads".to_string(),
+            ]
+        );
     }
 
     #[cfg(not(windows))]

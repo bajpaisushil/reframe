@@ -677,6 +677,36 @@ mod tests {
     }
 
     #[test]
+    fn folders_named_like_flags_stay_absolute_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let flag = dir.path().join("-rf");
+        std::fs::create_dir(&flag).unwrap();
+        for (os, app) in [
+            (OsKind::Linux, "nautilus"),
+            (OsKind::Windows, "explorer"),
+            (OsKind::Macos, "finder"),
+        ] {
+            let mut e = entry(app, &[&flag]);
+            e.launch.executable = Some(PathBuf::from(format!("/usr/bin/{app}")));
+            let steps = plan(os, &e).unwrap();
+            assert_eq!(
+                steps[0].request.args.last(),
+                Some(&flag.display().to_string()),
+                "{app}"
+            );
+        }
+        // A relative "-rf" (e.g. from an edited workspace) is never passed at all.
+        let mut relative = entry("nautilus", &[Path::new("-rf")]);
+        relative.launch.executable = Some(PathBuf::from("/usr/bin/nautilus"));
+        assert!(
+            plan(OsKind::Linux, &relative).unwrap()[0]
+                .request
+                .args
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn plain_launch_when_no_folder_is_left() {
         let f = folders();
         let mut e = entry("nautilus", &[&f.missing]);

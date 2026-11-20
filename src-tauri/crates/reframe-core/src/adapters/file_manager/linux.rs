@@ -179,18 +179,13 @@ impl FolderSearch {
                 }
             }
             index.add_if_named(names, home);
+            let children = list_dir(home);
+            index.add_children(names, home, &children);
             let mut descended = 0;
-            for child in list_dir(home) {
-                if names.contains(&child.name) && child.path.is_dir() {
-                    index.add(&child.name, &child.path);
-                }
+            for child in &children.entries {
                 if descended < MAX_DESCENDED && child.is_real_dir && !child.name.starts_with('.') {
                     descended += 1;
-                    for grandchild in list_dir(&child.path) {
-                        if names.contains(&grandchild.name) && grandchild.path.is_dir() {
-                            index.add(&grandchild.name, &grandchild.path);
-                        }
-                    }
+                    index.add_children(names, &child.path, &list_dir(&child.path));
                 }
             }
         }
@@ -202,11 +197,7 @@ impl FolderSearch {
             }
         }
         for parent in &self.volume_parents {
-            for child in list_dir(parent) {
-                if names.contains(&child.name) && child.path.is_dir() {
-                    index.add(&child.name, &child.path);
-                }
-            }
+            index.add_children(names, parent, &list_dir(parent));
         }
         if let Some(text) = self.mounts_file.as_deref().and_then(read_small) {
             for mount in parse_mounts(&text) {
@@ -241,6 +232,25 @@ struct FolderIndex {
 }
 
 impl FolderIndex {
+    /// Record the folders in `dir` (listed as `listing`) named like `names`. When `dir` has too
+    /// many entries to list them all, the names are also looked up directly: a folder past the
+    /// cap must not be missed, or a same-named folder elsewhere would look unique.
+    fn add_children(&mut self, names: &HashSet<String>, dir: &Path, listing: &Listing) {
+        for child in &listing.entries {
+            if names.contains(&child.name) && child.path.is_dir() {
+                self.add(&child.name, &child.path);
+            }
+        }
+        if !listing.complete {
+            for name in names.iter().filter(|name| is_plain_name(name)) {
+                let path = dir.join(name);
+                if path.is_dir() {
+                    self.add(name, &path);
+                }
+            }
+        }
+    }
+
     fn add_if_named(&mut self, names: &HashSet<String>, path: &Path) {
         if let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned())
             && names.contains(&name)
@@ -275,20 +285,38 @@ struct DirEntry {
     is_real_dir: bool,
 }
 
+/// The entries of a folder, at most [`MAX_DIR_ENTRIES`].
+struct Listing {
+    entries: Vec<DirEntry>,
+    /// False when the folder has more entries than were listed.
+    complete: bool,
+}
+
 /// Entries of `dir` (unreadable folders are simply empty), capped at [`MAX_DIR_ENTRIES`].
-fn list_dir(dir: &Path) -> Vec<DirEntry> {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return Vec::new();
+fn list_dir(dir: &Path) -> Listing {
+    let Ok(read) = fs::read_dir(dir) else {
+        return Listing {
+            entries: Vec::new(),
+            complete: true,
+        };
     };
-    entries
-        .flatten()
+    let mut read = read.flatten();
+    let entries = read
+        .by_ref()
         .take(MAX_DIR_ENTRIES)
         .map(|entry| DirEntry {
             name: entry.file_name().to_string_lossy().into_owned(),
             path: entry.path(),
             is_real_dir: entry.file_type().is_ok_and(|t| t.is_dir()),
         })
-        .collect()
+        .collect();
+    let complete = read.next().is_none();
+    Listing { entries, complete }
+}
+
+/// A single folder name (`Downloads`), never a path, `.` or `..`.
+fn is_plain_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\0'])
 }
 
 /// Small configuration files only (a few KB in practice).
@@ -631,6 +659,45 @@ NOT_A_DIR="$HOME/x"
             FolderMatch::NotLocal,
         ];
         assert_eq!(results, expected);
+    }
+
+    #[test]
+    fn folders_past_the_listing_cap_are_still_found() {
+        // A folder with more entries than are listed (a Downloads folder with thousands of
+        // items): a wanted folder past the cap must not be missed, or a same-named folder
+        // elsewhere would look unique and the wrong folder would be captured.
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        let big = home.join("Downloads");
+        fs::create_dir_all(&big).unwrap();
+        let names: Vec<String> = (0..MAX_DIR_ENTRIES + 10)
+            .map(|i| format!("d{i:05}"))
+            .collect();
+        for name in &names {
+            fs::create_dir(big.join(name)).unwrap();
+        }
+        let search = FolderSearch {
+            home: Some(home.clone()),
+            ..Default::default()
+        };
+        let results = search.resolve(&names);
+        let missed: Vec<&String> = names
+            .iter()
+            .zip(&results)
+            .filter(|(_, result)| !matches!(result, FolderMatch::Found(_)))
+            .map(|(name, _)| name)
+            .collect();
+        assert!(
+            missed.is_empty(),
+            "{} folders were missed, e.g. {:?}",
+            missed.len(),
+            missed.first()
+        );
+        // Names that are not plain folder names are never looked up as paths.
+        assert_eq!(
+            search.resolve(&["..".to_string(), "Downloads/d00001".to_string()]),
+            vec![FolderMatch::NotFound, FolderMatch::NotFound]
+        );
     }
 
     #[test]
