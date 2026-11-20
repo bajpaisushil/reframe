@@ -35,6 +35,8 @@
 //! - Focusing is best effort: since macOS 14 the system may decline to activate another
 //!   application while the user works elsewhere.
 //! - Applications launched through Launch Services (`/usr/bin/open`) report no process id.
+//! - Monitor ids are display UUIDs. Identical displays without serial numbers share a UUID; their
+//!   ids then include the display's position and change when the arrangement changes.
 //! - `NSScreen` may only be used on the main thread. Platform calls arrive on worker threads, so
 //!   screen data is fetched through the main dispatch queue with a timeout; if the main thread
 //!   does not answer (a host without a main run loop), monitor names, usable areas and scale

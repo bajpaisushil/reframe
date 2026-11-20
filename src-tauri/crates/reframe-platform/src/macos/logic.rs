@@ -291,6 +291,7 @@ impl CgWindow {
             number: self.number,
             title: self.title.as_deref(),
             bounds: self.bounds,
+            on_screen: self.on_screen,
         }
     }
 }
@@ -338,10 +339,20 @@ const SCREEN_MATCH_TOLERANCE: f64 = 1.0;
 ///
 /// Without screen data the work area falls back to the full display bounds, the name to a
 /// generic label and the scale factor to the display mode's pixel density.
+///
+/// Monitor ids are the display UUIDs. Identical displays without serial numbers can share a UUID
+/// (macOS derives it from vendor, model and serial number); ids must still be unique, so a shared
+/// UUID gets the display's origin appended (stable while the arrangement is), and a display that
+/// would still collide (mirrored at the same origin) gets its CoreGraphics display id.
 pub(crate) fn build_monitors(
     displays: &[DisplayRecord],
     screens: &[ScreenRecord],
 ) -> Vec<MonitorInfo> {
+    let mut uuid_counts: HashMap<&str, usize> = HashMap::new();
+    for uuid in displays.iter().filter_map(|d| non_blank(d.uuid.as_deref())) {
+        *uuid_counts.entry(uuid).or_default() += 1;
+    }
+    let mut used_ids: HashSet<String> = HashSet::new();
     let main_height = displays
         .iter()
         .find(|d| d.is_main)
@@ -392,10 +403,21 @@ pub(crate) fn build_monitors(
                 .filter(positive)
                 .or(display.mode_scale.filter(positive))
                 .unwrap_or(1.0);
+            let display_id = || format!("cg-display-{}", display.id);
+            let id = match non_blank(display.uuid.as_deref()) {
+                Some(uuid) if uuid_counts.get(uuid).is_some_and(|&n| n > 1) => {
+                    format!("{uuid}@{},{}", bounds.x, bounds.y)
+                }
+                Some(uuid) => uuid.to_string(),
+                None => display_id(),
+            };
+            let id = if used_ids.insert(id.clone()) {
+                id
+            } else {
+                display_id()
+            };
             MonitorInfo {
-                id: non_blank(display.uuid.as_deref())
-                    .map(str::to_string)
-                    .unwrap_or_else(|| format!("cg-display-{}", display.id)),
+                id,
                 name,
                 bounds,
                 work_area,
@@ -430,9 +452,9 @@ pub(crate) fn target_monitor<'a>(
     monitor_for(bounds, monitors)
         .or_else(|| {
             let (cx, cy) = bounds.center();
+            // `min_by_key` keeps the first minimum, so ties go to the first monitor.
             monitors
                 .iter()
-                .rev()
                 .min_by_key(|m| distance_sq_to_rect(cx, cy, &m.bounds))
         })
         .or_else(|| monitors.iter().find(|m| m.is_primary))
@@ -514,6 +536,8 @@ pub(crate) struct WindowKey<'a> {
     pub(crate) number: u32,
     pub(crate) title: Option<&'a str>,
     pub(crate) bounds: FRect,
+    /// `kCGWindowIsOnscreen`: an on-screen window cannot be a minimized Accessibility window.
+    pub(crate) on_screen: bool,
 }
 
 /// Position/size tolerance (points) when matching windows by geometry.
@@ -541,8 +565,9 @@ pub(crate) fn match_score(key: &WindowKey<'_>, ax: &AxWindow) -> Option<u8> {
 ///
 /// Windows whose CoreGraphics number is known on the Accessibility side are paired exactly;
 /// the rest are paired greedily by [`match_score`] (best score first, then CoreGraphics z-order,
-/// then Accessibility order, which is normally also front to back). Returns, for every key, the
-/// index of its Accessibility window.
+/// then Accessibility order, which is normally also front to back), never pairing a minimized
+/// Accessibility window with an on-screen CoreGraphics window. Returns, for every key, the index
+/// of its Accessibility window.
 pub(crate) fn assign_windows(keys: &[WindowKey<'_>], ax: &[AxWindow]) -> Vec<Option<usize>> {
     let mut result: Vec<Option<usize>> = vec![None; keys.len()];
     let mut used = vec![false; ax.len()];
@@ -565,8 +590,9 @@ pub(crate) fn assign_windows(keys: &[WindowKey<'_>], ax: &[AxWindow]) -> Vec<Opt
         }
         for (ai, window) in ax.iter().enumerate() {
             // A window whose number is known belongs to a CoreGraphics window that is not in
-            // `keys`; it must not be paired by geometry with another one.
-            if used[ai] || window.cg_id.is_some() {
+            // `keys`; it must not be paired by geometry with another one. A minimized window
+            // keeps its frame, so it can match an on-screen window's geometry exactly.
+            if used[ai] || window.cg_id.is_some() || (key.on_screen && window.minimized) {
                 continue;
             }
             if let Some(score) = match_score(key, window) {
@@ -1252,7 +1278,8 @@ pub(crate) fn app_bundle_candidates(display_name: &str, home: Option<&Path>) -> 
         format!("{name}.app")
     };
     let mut dirs: Vec<PathBuf> = APPLICATION_DIRS.iter().map(PathBuf::from).collect();
-    if let Some(home) = home.filter(|h| h.is_absolute()) {
+    // `has_root`, not `is_absolute`: macOS semantics on every host (see `open_application_args`).
+    if let Some(home) = home.filter(|h| h.has_root()) {
         dirs.push(home.join("Applications"));
     }
     dirs.into_iter().map(|dir| dir.join(&file)).collect()
@@ -1339,7 +1366,9 @@ pub(crate) fn open_application_args(
             out.push(id.into());
         }
         OpenApplication::Path(path) => {
-            if !path.is_absolute() {
+            // macOS semantics: a rooted path is absolute. `Path::is_absolute` follows the host OS,
+            // which differs on Windows, where this logic is also unit-tested.
+            if !path.has_root() {
                 return Err(format!(
                     "the application path {} is not absolute",
                     path.display()
@@ -1752,6 +1781,48 @@ mod tests {
     }
 
     #[test]
+    fn equally_near_monitors_resolve_to_the_first() {
+        let monitors = vec![
+            monitor(
+                "MAIN",
+                Rect::new(0, 0, 1440, 900),
+                Rect::new(0, 25, 1440, 800),
+                true,
+            ),
+            monitor(
+                "LEFT",
+                Rect::new(-1440, 0, 1440, 900),
+                Rect::new(-1440, 0, 1440, 900),
+                false,
+            ),
+        ];
+        // Below both monitors, centred on their shared edge: equally near to each.
+        let below = Rect::new(-50, 2000, 100, 100);
+        assert!(monitor_for(&below, &monitors).is_none());
+        assert_eq!(target_monitor(&below, &monitors).unwrap().id, "MAIN");
+    }
+
+    #[test]
+    fn identical_displays_get_unique_monitor_ids() {
+        let twin = |id: u32, x: f64, main: bool| DisplayRecord {
+            uuid: Some("TWIN".into()),
+            ..display(id, (x, 0.0, 1920.0, 1080.0), main)
+        };
+        let displays = vec![
+            twin(1, 0.0, true),
+            twin(2, 1920.0, false),
+            display(3, (-1440.0, 0.0, 1440.0, 900.0), false),
+            // Mirrored onto the first display: same UUID and origin.
+            twin(4, 0.0, false),
+        ];
+        let ids: Vec<String> = build_monitors(&displays, &[])
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
+        assert_eq!(ids, ["TWIN@0,0", "TWIN@1920,0", "UUID-3", "cg-display-4"]);
+    }
+
+    #[test]
     fn detects_maximized_frames() {
         let work = Rect::new(0, 25, 1440, 800);
         assert!(is_maximized(&Rect::new(0, 25, 1440, 800), &work));
@@ -1772,6 +1843,7 @@ mod tests {
             number: 1,
             title: Some("Doc"),
             bounds: FRect::new(100.0, 100.0, 500.0, 400.0),
+            on_screen: true,
         };
         assert_eq!(
             match_score(&key, &ax((100.0, 100.0, 500.0, 400.0), Some("Doc"))),
@@ -1803,16 +1875,19 @@ mod tests {
                 number: 10,
                 title: None,
                 bounds: FRect::new(0.0, 0.0, 500.0, 500.0),
+                on_screen: true,
             },
             WindowKey {
                 number: 11,
                 title: None,
                 bounds: FRect::new(0.0, 0.0, 500.0, 500.0),
+                on_screen: true,
             },
             WindowKey {
                 number: 12,
                 title: None,
                 bounds: FRect::new(900.0, 0.0, 300.0, 300.0),
+                on_screen: true,
             },
         ];
         let mut exact = ax((0.0, 0.0, 500.0, 500.0), None);
@@ -1838,11 +1913,13 @@ mod tests {
                 number: 1,
                 title: Some("b.txt"),
                 bounds: FRect::new(0.0, 0.0, 500.0, 500.0),
+                on_screen: true,
             },
             WindowKey {
                 number: 2,
                 title: Some("a.txt"),
                 bounds: FRect::new(0.0, 0.0, 500.0, 500.0),
+                on_screen: true,
             },
         ];
         let windows = vec![
@@ -1852,6 +1929,50 @@ mod tests {
         assert_eq!(assign_windows(&keys, &windows), vec![Some(1), Some(0)]);
         assert_eq!(assign_windows(&[], &windows), Vec::<Option<usize>>::new());
         assert_eq!(assign_windows(&keys, &[]), vec![None, None]);
+    }
+
+    #[test]
+    fn minimized_windows_never_match_on_screen_windows() {
+        let frame = (100.0, 100.0, 500.0, 400.0);
+        let mut minimized = ax(frame, None);
+        minimized.minimized = true;
+        let ax_windows = vec![minimized, ax(frame, None)];
+        let on_screen = cg(1, 100, frame, None);
+        assert_eq!(
+            assign_windows(&[on_screen.key()], &ax_windows),
+            vec![Some(1)]
+        );
+        let off_screen = CgWindow {
+            on_screen: false,
+            ..cg(2, 100, frame, None)
+        };
+        assert_eq!(
+            assign_windows(&[off_screen.key()], &ax_windows),
+            vec![Some(0)]
+        );
+
+        // Same frame on screen and minimized (no window numbers from Accessibility): the visible
+        // window stays normal and the minimized one is still listed.
+        let windows = assemble_windows(&WindowSources {
+            on_screen: &[on_screen],
+            off_screen: &[off_screen],
+            apps: &[app(100, "com.apple.Terminal")],
+            ax: &HashMap::from([(
+                100,
+                AxApp {
+                    windows: ax_windows,
+                    focus_known: false,
+                },
+            )]),
+            monitors: &laptop(),
+            frontmost_pid: None,
+        });
+        let summary: Vec<(&str, WindowState)> =
+            windows.iter().map(|w| (w.id.as_str(), w.state)).collect();
+        assert_eq!(
+            summary,
+            vec![("1", WindowState::Normal), ("2", WindowState::Minimized)]
+        );
     }
 
     // --- window list assembly ---------------------------------------------------------------
