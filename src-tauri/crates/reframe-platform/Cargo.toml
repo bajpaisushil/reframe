@@ -43,10 +43,64 @@ windows = { version = "0.62", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Default features are disabled on the framework crates (their defaults enable every binding in
+# the framework); only the bindings the macOS implementation uses are listed.
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSDictionary", "NSURL", "NSData", "NSValue", "NSGeometry"] }
-objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSScreen", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics"] }
-objc2-core-foundation = { version = "0.3", features = ["CFString", "CFArray", "CFDictionary", "CFNumber", "CFBase", "CFUUID"] }
-objc2-core-graphics = { version = "0.3", features = ["CGWindow", "CGDirectDisplay", "CGDisplayConfiguration"] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "objc2-core-foundation",
+  "NSArray",
+  "NSBundle",
+  "NSData",
+  "NSDictionary",
+  "NSEnumerator",
+  "NSGeometry",
+  "NSProcessInfo",
+  "NSString",
+  "NSURL",
+  "NSValue",
+] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "libc",
+  "objc2-core-foundation",
+  "NSBitmapImageRep",
+  "NSGraphics",
+  "NSGraphicsContext",
+  "NSImage",
+  "NSImageRep",
+  "NSRunningApplication",
+  "NSScreen",
+  "NSWorkspace",
+] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "CFArray",
+  "CFBase",
+  "CFCGTypes",
+  "CFDictionary",
+  "CFNumber",
+  "CFString",
+  "CFUUID",
+] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = [
+  "std",
+  "libc",
+  "CGDirectDisplay",
+  "CGDisplayConfiguration",
+  "CGError",
+  "CGWindow",
+] }
+# HIServices Accessibility (AX) API.
+objc2-application-services = { version = "0.3", default-features = false, features = [
+  "std",
+  "HIServices",
+  "AXError",
+  "AXUIElement",
+  "AXValue",
+] }
+# Main-queue dispatch for the main-thread-only NSScreen API.
+dispatch2 = { version = "0.3", default-features = false, features = ["std"] }
+libc = "0.2"
 
 [dev-dependencies]
