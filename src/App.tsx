@@ -16,6 +16,7 @@ import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { ExplorePage } from "@/features/desktop-explorer/ExplorePage";
 import { ImportPage } from "@/features/portability/ImportPage";
 import { RestorePage } from "@/features/restoration/RestorePage";
+import { StartupRestorePrompt } from "@/features/restoration/StartupRestorePrompt";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { WorkspaceDetailPage } from "@/features/workspaces/WorkspaceDetailPage";
 import { WorkspacesPage } from "@/features/workspaces/WorkspacesPage";
@@ -80,6 +81,8 @@ export function App() {
           <AppShell>
             <RouteView />
           </AppShell>
+          {/* Outside the shell's per-route subtree so it is mounted exactly once. */}
+          <StartupRestorePrompt />
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>
