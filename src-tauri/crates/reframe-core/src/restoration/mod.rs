@@ -5,6 +5,7 @@ pub mod layout;
 pub mod matcher;
 pub mod orchestrator;
 pub mod planner;
+pub(crate) mod reuse;
 pub(crate) mod validate;
 
 use std::sync::Arc;
@@ -69,10 +70,13 @@ pub type EventSink = dyn Fn(RestoreEvent) + Send + Sync;
 /// 3. Replace mode: gracefully close the `close_window_ids` that still exist (never kill, never
 ///    Reframe's own windows), wait up to `timing.close_wait`, and report each window
 ///    (`WindowCloseUpdated`: Requested → Closed / StillOpen / Failed). Then restore as Merge.
-/// 4. Merge/Replace: entries already satisfied by running windows ([`matcher`]) are not
-///    relaunched; their windows are arranged per the saved snapshots (when positions are
-///    enabled) and the entry completes ("Already running - arranged windows"). Additive:
-///    everything launches.
+/// 4. Merge/Replace: launch steps already satisfied by running windows of the entry's
+///    application are not launched again: a step with a title hint (project, folder) when a
+///    window shows it, a step without one when the application has any window. An entry whose
+///    steps are all satisfied completes at once ("Already running - arranged windows") after
+///    its windows are arranged per the saved snapshots (when positions are enabled); a partly
+///    open entry launches only the rest ("Opened 1 of 2 projects; 1 was already open").
+///    Additive: everything launches.
 /// 5. Validate each entry when it becomes ready (adapter launch plan, programs and working
 ///    folders exist), then launch it on a worker thread: at most `max_parallel` entries at a
 ///    time, launch starts staggered by `launch_delay_ms`, an entry only after all its planned

@@ -15,15 +15,18 @@
 //! 2. Plan the dependency graph. An invalid graph fails the run *before* anything is closed
 //!    or launched.
 //! 3. Replace mode: gracefully close the confirmed windows and report each one.
-//! 4. Merge/Replace: entries whose application is already running are arranged, not launched.
+//! 4. Merge/Replace: launch steps that running windows already satisfy are not launched
+//!    (see `restoration::reuse`): fully open entries are arranged and complete at once, partly
+//!    open ones keep their open windows and launch only the rest.
 //! 5. Launch the rest: dependencies first, independent entries in parallel.
 //! 6. `RunFinished` — always the last event, after every worker has finished.
 //!
 //! # Limitations
 //!
-//! - "Already running" is decided per *application* ([`matcher::running_windows_for_entry`]):
-//!   in Merge/Replace mode an entry is reused as soon as its application has any window, even
-//!   if that window shows a different project or document than the one saved.
+//! - "Already open" is decided from window titles for launch steps with a title hint (a
+//!   project or folder name shown in the title) and per *application* for steps without one:
+//!   a generic application counts as running as soon as it has any window, whatever document
+//!   that window shows.
 //! - New windows are attributed through their owning process (launched process tree, adapter
 //!   identification, executable path). A window whose process the platform cannot report
 //!   (e.g. an X11 window without `_NET_WM_PID`) is never claimed, so it is neither counted
@@ -56,7 +59,9 @@ use reframe_platform::{
 use uuid::Uuid;
 
 use super::planner::{self, ExecutionPlan, PlanIssue};
-use super::{EventSink, RestoreEnv, RestoreOptions, RestoreTiming, layout, matcher, validate};
+use super::{
+    EventSink, RestoreEnv, RestoreOptions, RestoreTiming, layout, matcher, reuse, validate,
+};
 use crate::adapters::{AdapterRegistry, AppAdapter, InstanceModel, LaunchContext, LaunchStep};
 use crate::discovery;
 use crate::model::{
@@ -182,7 +187,34 @@ enum Slot {
 /// A validated entry, ready to launch.
 struct Prepared {
     adapter: Arc<dyn AppAdapter>,
+    /// The steps to launch.
     steps: Vec<LaunchStep>,
+    /// Steps already satisfied by running windows (Merge/Replace).
+    reused: Reused,
+    /// Steps of a partly open entry that cannot be launched (validation errors).
+    invalid: Vec<String>,
+}
+
+/// The already-open part of a partly open entry.
+#[derive(Default)]
+struct Reused {
+    /// Running windows taken over for the entry (claimed during the reuse phase).
+    windows: Vec<WindowId>,
+    /// Satisfied launch steps, out of `total_steps`.
+    steps: usize,
+    total_steps: usize,
+    /// Windows the satisfied steps account for.
+    expected_windows: u32,
+    /// Title hints of the satisfied steps (to match their windows to saved positions).
+    hints: Vec<String>,
+}
+
+/// An entry whose launch steps are partly satisfied by running windows (Merge/Replace),
+/// decided before anything is launched; only the unsatisfied steps are launched later.
+struct PartialReuse {
+    steps: Vec<LaunchStep>,
+    satisfied: Vec<bool>,
+    windows: Vec<WindowId>,
 }
 
 enum Launch {
@@ -286,10 +318,12 @@ impl<'a> Engine<'a> {
             self.close_windows(&options.close_window_ids);
         }
         let mut slots: HashMap<Uuid, Slot> = HashMap::new();
-        if options.mode != SwitchMode::Additive && !self.is_cancelled() {
-            self.reuse_running(&plan, &mut slots);
-        }
-        self.schedule(&plan, slots);
+        let partial = if options.mode != SwitchMode::Additive && !self.is_cancelled() {
+            self.reuse_running(&plan, &mut slots)
+        } else {
+            HashMap::new()
+        };
+        self.schedule(&plan, slots, partial);
         None
     }
 
@@ -447,50 +481,84 @@ impl<'a> Engine<'a> {
 
     // ------------------------------------------------------------------ Merge/Replace: reuse
 
-    /// Entries whose application already has windows are not launched: their windows are
-    /// arranged according to the saved snapshots and the entry completes immediately.
-    fn reuse_running(&self, plan: &ExecutionPlan, slots: &mut HashMap<Uuid, Slot>) {
+    /// Decide, before anything is launched, which launch steps running windows already
+    /// satisfy (see `restoration::reuse`; the switch planner decides the same way). Entries
+    /// whose steps are all satisfied are not launched: their windows are arranged according to
+    /// the saved snapshots and the entry completes immediately. Partly open entries keep the
+    /// windows they took over and are returned, so only their other steps are launched.
+    fn reuse_running(
+        &self,
+        plan: &ExecutionPlan,
+        slots: &mut HashMap<Uuid, Slot>,
+    ) -> HashMap<Uuid, PartialReuse> {
+        let mut partial = HashMap::new();
         let state = discovery::gather(self.platform);
         if state.windows.is_empty() && !self.info.capabilities.list_windows.is_available() {
             self.add_message(
                 "Reframe can't see open windows on this system, so applications that are already running could not be reused and may have been started again.",
             );
-            return;
+            return partial;
         }
-        for id in &plan.order {
-            let Some(entry) = self.workspace.entry(*id) else {
+        let planned: HashSet<Uuid> = plan.order.iter().copied().collect();
+        // Workspace order and one set of taken windows, exactly like the switch planner.
+        let mut taken: HashSet<WindowId> = lock(&self.claimed).clone();
+        for entry in self
+            .workspace
+            .applications
+            .iter()
+            .filter(|e| planned.contains(&e.id))
+        {
+            let steps = self.launch_steps(entry);
+            let Some(decision) =
+                reuse::decide_entry(entry, &steps, &state, self.adapters, &mut taken)
+            else {
                 continue;
             };
-            let running = matcher::running_windows_for_entry(entry, &state, self.adapters);
-            if running.is_empty() {
+            if decision.satisfied_count() == 0 {
                 continue;
             }
-            let candidates: Vec<WindowInfo> = {
-                let claimed = lock(&self.claimed);
-                running
-                    .iter()
-                    .filter(|id| !claimed.contains(*id))
-                    .filter_map(|id| state.windows.iter().find(|w| &w.id == id))
-                    .cloned()
-                    .collect()
-            };
-            let hints = self.title_hints(entry);
+            lock(&self.claimed).extend(decision.windows.iter().cloned());
+            if !decision.complete() {
+                // Only possible with a launch plan of several steps.
+                if let Ok(steps) = steps {
+                    partial.insert(
+                        entry.id,
+                        PartialReuse {
+                            steps,
+                            satisfied: decision.satisfied,
+                            windows: decision.windows,
+                        },
+                    );
+                }
+                continue;
+            }
+            let candidates: Vec<WindowInfo> = decision
+                .windows
+                .iter()
+                .filter_map(|id| state.windows.iter().find(|w| &w.id == id))
+                .cloned()
+                .collect();
+            let hints: Vec<String> = reuse::step_hints(&steps).into_iter().flatten().collect();
             let assignments =
                 matcher::assign_windows_with_fallback(&entry.windows, &candidates, &hints);
-            {
-                let mut claimed = lock(&self.claimed);
-                claimed.extend(assignments.iter().map(|(_, w)| w.clone()));
-            }
             let placement = self.place_windows(entry, &assignments);
             let attempted = placement.placed + count_u32(placement.errors.len());
-            let message = match placement.errors.first() {
-                None if placement.placed > 0 => ALREADY_RUNNING_ARRANGED.to_string(),
-                None => ALREADY_RUNNING.to_string(),
-                Some(_) if placement.placed > 0 => format!(
-                    "Already running - arranged {} of {attempted} windows",
-                    placement.placed
+            let (status, message) = match placement.errors.first() {
+                None if placement.placed > 0 => {
+                    (EntryStatus::Completed, ALREADY_RUNNING_ARRANGED.to_string())
+                }
+                None => (EntryStatus::Completed, ALREADY_RUNNING.to_string()),
+                Some(_) if placement.placed > 0 => (
+                    EntryStatus::PartiallyCompleted,
+                    format!(
+                        "Already running - arranged {} of {attempted} windows",
+                        placement.placed
+                    ),
                 ),
-                Some(error) => format!("Already running - its windows could not be moved: {error}"),
+                Some(error) => (
+                    EntryStatus::PartiallyCompleted,
+                    format!("Already running - its windows could not be moved: {error}"),
+                ),
             };
             let restored = if attempted > 0 {
                 placement.placed
@@ -498,19 +566,20 @@ impl<'a> Engine<'a> {
                 count_u32(assignments.len())
             }
             .min(count_u32(entry.windows.len()));
-            self.finish_entry(*id, EntryStatus::Completed, Some(message), restored);
+            self.finish_entry(entry.id, status, Some(message), restored);
             slots.insert(
-                *id,
+                entry.id,
                 Slot::Done {
                     ok: true,
                     ready_at: Instant::now(),
                 },
             );
         }
+        partial
     }
 
-    /// Title hints from the adapter's launch plan (empty when it cannot be built).
-    fn title_hints(&self, entry: &ApplicationEntry) -> Vec<String> {
+    /// The adapter's launch steps for `entry`.
+    fn launch_steps(&self, entry: &ApplicationEntry) -> Result<Vec<LaunchStep>, String> {
         let ctx = LaunchContext {
             platform: self.platform,
             info: &self.info,
@@ -518,16 +587,20 @@ impl<'a> Engine<'a> {
         self.adapters
             .get(&entry.adapter_id)
             .launch_plan(&ctx, entry)
-            .map(|steps| steps.into_iter().filter_map(|s| s.title_hint).collect())
-            .unwrap_or_default()
     }
 
     // ------------------------------------------------------------------ scheduling
 
     /// Launch every planned entry that is not done yet: at most `max_parallel` at a time, an
     /// entry only after its dependencies are up (plus their `delay_after_launch_ms`), entries
-    /// of the same application one after another so their windows can be told apart.
-    fn schedule(&self, plan: &ExecutionPlan, mut slots: HashMap<Uuid, Slot>) {
+    /// of the same application one after another so their windows can be told apart. Partly
+    /// open entries (`partial`) launch only their unsatisfied steps.
+    fn schedule(
+        &self,
+        plan: &ExecutionPlan,
+        mut slots: HashMap<Uuid, Slot>,
+        mut partial: HashMap<Uuid, PartialReuse>,
+    ) {
         for id in &plan.order {
             slots.entry(*id).or_insert(Slot::Waiting);
         }
@@ -603,7 +676,7 @@ impl<'a> Engine<'a> {
                     {
                         continue;
                     }
-                    let prepared = match self.prepare(entry) {
+                    let prepared = match self.prepare(entry, partial.remove(id)) {
                         Ok(prepared) => prepared,
                         Err(message) => {
                             self.finish_entry(*id, EntryStatus::Failed, Some(message), 0);
@@ -708,18 +781,50 @@ impl<'a> Engine<'a> {
             })
     }
 
-    /// Validating: build the launch plan and check that its programs and folders exist.
-    fn prepare(&self, entry: &ApplicationEntry) -> Result<Prepared, String> {
+    /// Validating: build the launch plan and check that its programs and folders exist. A
+    /// partly open entry keeps the steps decided in the reuse phase and launches only the
+    /// unsatisfied ones; those that fail validation count as failed launches, so the windows
+    /// that are already open are still arranged.
+    fn prepare(
+        &self,
+        entry: &ApplicationEntry,
+        partial: Option<PartialReuse>,
+    ) -> Result<Prepared, String> {
         self.update(entry.id, |p| {
             p.status = EntryStatus::Validating;
             p.message = None;
         });
         let adapter = self.adapters.get(&entry.adapter_id);
-        let ctx = LaunchContext {
-            platform: self.platform,
-            info: &self.info,
-        };
-        let steps = adapter.launch_plan(&ctx, entry)?;
+        if let Some(partial) = partial {
+            let mut reused = Reused {
+                windows: partial.windows,
+                total_steps: partial.steps.len(),
+                ..Reused::default()
+            };
+            let mut steps = Vec::new();
+            let mut invalid = Vec::new();
+            for (step, satisfied) in partial.steps.into_iter().zip(partial.satisfied) {
+                if satisfied {
+                    reused.steps += 1;
+                    reused.expected_windows = reused
+                        .expected_windows
+                        .saturating_add(step.expected_windows);
+                    reused.hints.extend(step.title_hint);
+                } else {
+                    match validate::check_request(&step.request, &entry.display_name) {
+                        Ok(()) => steps.push(step),
+                        Err(message) => invalid.push(message),
+                    }
+                }
+            }
+            return Ok(Prepared {
+                adapter,
+                steps,
+                reused,
+                invalid,
+            });
+        }
+        let steps = self.launch_steps(entry)?;
         if steps.is_empty() {
             return Err(format!(
                 "Reframe doesn't know how to start {} - edit the application to choose its location",
@@ -729,7 +834,12 @@ impl<'a> Engine<'a> {
         for step in &steps {
             validate::check_request(&step.request, &entry.display_name)?;
         }
-        Ok(Prepared { adapter, steps })
+        Ok(Prepared {
+            adapter,
+            steps,
+            reused: Reused::default(),
+            invalid: Vec::new(),
+        })
     }
 
     // ------------------------------------------------------------------ one entry (worker)
@@ -740,7 +850,12 @@ impl<'a> Engine<'a> {
         prepared: Prepared,
         first_slot: Instant,
     ) -> EntryStatus {
-        let Prepared { adapter, steps } = prepared;
+        let Prepared {
+            adapter,
+            steps,
+            reused,
+            invalid,
+        } = prepared;
         let retries = entry
             .options
             .retry_count
@@ -753,13 +868,19 @@ impl<'a> Engine<'a> {
                 .unwrap_or(self.workspace.restore.timeout_ms),
         ))
         .min(MAX_WINDOW_TIMEOUT);
-        let step_windows = steps
+        let step_windows = steps.iter().fold(reused.expected_windows, |sum, s| {
+            sum.saturating_add(s.expected_windows)
+        });
+        let hints: Vec<String> = steps
             .iter()
-            .fold(0u32, |sum, s| sum.saturating_add(s.expected_windows));
-        let hints: Vec<String> = steps.iter().filter_map(|s| s.title_hint.clone()).collect();
+            .filter_map(|s| s.title_hint.clone())
+            .chain(reused.hints.iter().cloned())
+            .collect();
 
         let single_instance = adapter.instance_model() == InstanceModel::SingleInstance;
         let mut tracker = Tracker::new(self, entry, single_instance);
+        // Windows that were open already (partly open entry) are this entry's from the start.
+        tracker.adopt(&reused.windows);
         // Why windows cannot be tracked for this entry, if they cannot.
         let mut untracked: Option<String> = (!self.info.capabilities.list_windows.is_available())
             .then(|| {
@@ -785,7 +906,9 @@ impl<'a> Engine<'a> {
         let mut launched = 0usize;
         // Windows the successfully launched steps should open (what is worth waiting for).
         let mut launched_windows = 0u32;
-        let mut failures: Vec<String> = Vec::new();
+        // Steps of a partly open entry that failed validation count as failed launches.
+        let attempted_steps = steps.len() + invalid.len();
+        let mut failures: Vec<String> = invalid;
         let mut attempt = 0u32;
         for (index, step) in steps.iter().enumerate() {
             let slot = if index == 0 {
@@ -818,7 +941,7 @@ impl<'a> Engine<'a> {
                 Launch::Cancelled => return self.cancelled_entry(entry.id, launched > 0),
             }
         }
-        if launched == 0 {
+        if launched == 0 && reused.steps == 0 {
             let message = failures
                 .into_iter()
                 .next()
@@ -833,17 +956,33 @@ impl<'a> Engine<'a> {
         let mut problems: Vec<String> = Vec::new();
         let mut restored = 0u32;
         if tracking {
-            if !tracker.wait_for_windows(launched_windows, entry.windows.len(), timeout, expected) {
-                return self.cancelled_entry(entry.id, true);
+            if launched > 0 {
+                if !tracker.wait_for_windows(
+                    launched_windows,
+                    entry.windows.len(),
+                    timeout,
+                    expected,
+                ) {
+                    return self.cancelled_entry(entry.id, true);
+                }
+            } else {
+                // Nothing was launched: only the windows that were open already are arranged.
+                tracker.observe();
             }
             let candidates = tracker.claimed_windows();
             let found = count_u32(candidates.len());
+            let found_new = count_u32(
+                candidates
+                    .iter()
+                    .filter(|w| !tracker.adopted.contains(&w.id))
+                    .count(),
+            );
             let assignments =
                 matcher::assign_windows_with_fallback(&entry.windows, &candidates, &hints);
             let placement = self.place_windows(entry, &assignments);
             let failed_moves = count_u32(placement.errors.len());
             restored = found.saturating_sub(failed_moves).min(expected);
-            if launched_windows > 0 && found == 0 {
+            if launched_windows > 0 && found_new == 0 {
                 problems.push(format!(
                     "Started, but no window appeared within {}",
                     format_duration(timeout)
@@ -865,16 +1004,33 @@ impl<'a> Engine<'a> {
         }
         if let Some(error) = failures.first() {
             problems.push(format!(
-                "{} of {} launches failed: {error}",
-                failures.len(),
-                steps.len()
+                "{} of {attempted_steps} launches failed: {error}",
+                failures.len()
             ));
         }
+        let total = reused.total_steps;
+        let noun = reuse::step_noun(&entry.state, total);
+        let verb = if reused.steps == 1 { "was" } else { "were" };
         if problems.is_empty() {
-            let message =
-                (!tracking).then(|| "Started - Reframe could not see its windows".to_string());
+            let mut notes: Vec<String> = Vec::new();
+            if reused.steps > 0 {
+                notes.push(format!(
+                    "Opened {launched} of {total} {noun}; {} {verb} already open",
+                    reused.steps
+                ));
+            }
+            if !tracking {
+                notes.push("Started - Reframe could not see its windows".to_string());
+            }
+            let message = (!notes.is_empty()).then(|| notes.join("; "));
             self.finish_entry(entry.id, EntryStatus::Completed, message, restored)
         } else {
+            if reused.steps > 0 {
+                problems.push(format!(
+                    "{} of {total} {noun} {verb} already open",
+                    reused.steps
+                ));
+            }
             self.finish_entry(
                 entry.id,
                 EntryStatus::PartiallyCompleted,
@@ -1187,8 +1343,10 @@ struct Tracker<'e, 'a> {
     lookups: HashMap<u32, u8>,
     /// Per process: identified as this entry's application.
     verdicts: HashMap<u32, bool>,
-    /// Claimed windows, in the order they appeared.
+    /// Claimed windows, in the order they appeared (taken-over windows first).
     mine: Vec<WindowId>,
+    /// Windows that were open already and were taken over for this entry.
+    adopted: HashSet<WindowId>,
     latest: Vec<WindowInfo>,
 }
 
@@ -1205,6 +1363,7 @@ impl<'e, 'a> Tracker<'e, 'a> {
             lookups: HashMap::new(),
             verdicts: HashMap::new(),
             mine: Vec::new(),
+            adopted: HashSet::new(),
             latest: Vec::new(),
         }
     }
@@ -1231,8 +1390,30 @@ impl<'e, 'a> Tracker<'e, 'a> {
         self.family.insert(pid);
     }
 
-    /// Wait until `wait_for` windows appeared — then up to `settle` longer while saved windows
-    /// are still unmatched — or until `timeout`. Returns false when cancelled.
+    /// Count windows taken over before launching (already claimed for this entry) as its own.
+    fn adopt(&mut self, windows: &[WindowId]) {
+        for id in windows {
+            if self.adopted.insert(id.clone()) {
+                self.mine.push(id.clone());
+            }
+        }
+    }
+
+    /// Refresh the window list without claiming new windows (nothing was launched).
+    fn observe(&mut self) {
+        match self.engine.platform.windows() {
+            Ok(windows) => {
+                let present: HashSet<&WindowId> = windows.iter().map(|w| &w.id).collect();
+                self.mine.retain(|id| present.contains(id));
+                self.latest = windows;
+            }
+            Err(error) => log::debug!("listing windows failed: {error}"),
+        }
+    }
+
+    /// Wait until `wait_for` new windows appeared (windows taken over do not count) — then up
+    /// to `settle` longer while saved windows are still unmatched — or until `timeout`.
+    /// Returns false when cancelled.
     fn wait_for_windows(
         &mut self,
         wait_for: u32,
@@ -1241,7 +1422,6 @@ impl<'e, 'a> Tracker<'e, 'a> {
         expected: u32,
     ) -> bool {
         let wait_for = usize::try_from(wait_for).unwrap_or(usize::MAX);
-        let wanted = snapshots.max(wait_for);
         let deadline = Instant::now() + timeout;
         let mut reached_at: Option<Instant> = None;
         let mut reported = 0usize;
@@ -1257,10 +1437,15 @@ impl<'e, 'a> Tracker<'e, 'a> {
                 self.engine
                     .update(self.entry.id, |p| p.windows_restored = shown);
             }
+            let found_new = self
+                .mine
+                .iter()
+                .filter(|id| !self.adopted.contains(*id))
+                .count();
             let now = Instant::now();
             let mut wake = (now + self.engine.timing.poll).min(deadline);
-            if found >= wait_for {
-                if found >= wanted {
+            if found_new >= wait_for {
+                if found >= snapshots {
                     return true;
                 }
                 let settle_end = *reached_at.get_or_insert(now) + self.engine.timing.settle;

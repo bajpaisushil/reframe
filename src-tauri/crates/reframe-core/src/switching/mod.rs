@@ -6,20 +6,24 @@ use std::collections::HashSet;
 
 use reframe_platform::{Capability, PlatformInfo, SupportLevel, WindowId};
 
-use crate::adapters::{AdapterRegistry, LaunchContext};
+use crate::adapters::{AdapterRegistry, LaunchContext, LaunchStep};
 use crate::model::{
     ApplicationEntry, CloseCandidate, DesktopState, PlannedLaunch, PlannedReuse, SwitchMode,
     SwitchPlan, Workspace,
 };
-use crate::restoration::{matcher, validate};
+use crate::restoration::{matcher, reuse, validate};
 
 use self::snapshot::SnapshotPlatform;
 
 /// Compute what switching to `target` would do. Pure: nothing is launched or closed.
 ///
 /// - Additive: every enabled entry is launched.
-/// - Merge: entries satisfied by running windows ([`matcher::running_windows_for_entry`]) are
-///   reused (their windows will be arranged); the rest launch.
+/// - Merge: entries whose launch steps are all satisfied by running windows of their
+///   application are reused (their windows will be arranged); the rest launch, with a reason
+///   such as "1 of 2 projects not open". A step with a title hint (project, folder) is
+///   satisfied by a window showing that name, a step without one by any window of the
+///   application. This is the same decision the restore makes, in the same (workspace)
+///   order, so two entries of the same application never count the same window.
 /// - Replace: like Merge, plus close candidates = titled running windows of applications that
 ///   are not in `target` (enabled or not). `default_selected` is true only for windows of
 ///   applications that belong to `previous`. Reframe's own windows (this process) and
@@ -52,33 +56,41 @@ pub fn plan_switch(
 
     let mut launch = Vec::new();
     let mut reuse = Vec::new();
+    // Windows already taken over by an earlier entry.
+    let mut taken: HashSet<WindowId> = HashSet::new();
     for entry in target.applications.iter().filter(|e| e.enabled) {
-        let running = if reuse_allowed {
-            matcher::running_windows_for_entry(entry, state, adapters)
+        let steps = adapters.get(&entry.adapter_id).launch_plan(&ctx, entry);
+        // `Some` when the application has windows no earlier entry took.
+        let decision = if reuse_allowed {
+            reuse::decide_entry(entry, &steps, state, adapters, &mut taken)
         } else {
-            Vec::new()
+            None
         };
-        if !running.is_empty() {
+        if let Some(decision) = decision.as_ref().filter(|d| d.complete()) {
             reuse.push(PlannedReuse {
                 entry_id: entry.id,
                 display_name: entry.display_name.clone(),
                 app_id: entry.app_id.clone(),
-                window_ids: running,
+                window_ids: decision.windows.clone(),
             });
             continue;
         }
-        let reason = match mode {
-            SwitchMode::Additive => "Additive mode - starts even if it is already running",
-            _ if !can_list => "Running applications can't be detected on this system",
-            _ => "Not running",
+        let reason = match (mode, &decision) {
+            (SwitchMode::Additive, _) => {
+                "Additive mode - starts even if it is already running".to_string()
+            }
+            _ if !can_list => "Running applications can't be detected on this system".to_string(),
+            (_, Some(decision)) => reuse::not_open_reason(&entry.state, decision),
+            (_, None) => "Not running".to_string(),
         };
         launch.push(PlannedLaunch {
             entry_id: entry.id,
             display_name: entry.display_name.clone(),
             app_id: entry.app_id.clone(),
-            reason: reason.to_string(),
+            reason,
         });
-        if let Some(problem) = launch_problem(entry, adapters, &ctx) {
+        let satisfied = decision.map(|d| d.satisfied).unwrap_or_default();
+        if let Some(problem) = launch_problem(entry, &steps, &satisfied) {
             warnings.push(problem);
         }
     }
@@ -100,22 +112,25 @@ pub fn plan_switch(
     }
 }
 
-/// Why `entry` could not be launched, if it could not.
+/// Why `entry` could not be launched, if it could not. Steps marked in `satisfied` are
+/// already open and not launched, so they are not checked.
 fn launch_problem(
     entry: &ApplicationEntry,
-    adapters: &AdapterRegistry,
-    ctx: &LaunchContext<'_>,
+    steps: &Result<Vec<LaunchStep>, String>,
+    satisfied: &[bool],
 ) -> Option<String> {
     let name = &entry.display_name;
-    match adapters.get(&entry.adapter_id).launch_plan(ctx, entry) {
-        Err(message) if message.contains(name.as_str()) => Some(message),
+    match steps {
+        Err(message) if message.contains(name.as_str()) => Some(message.clone()),
         Err(message) => Some(format!("{name}: {message}")),
         Ok(steps) if steps.is_empty() => Some(format!(
             "Reframe doesn't know how to start {name} - edit the application to choose its location"
         )),
         Ok(steps) => steps
             .iter()
-            .find_map(|step| validate::check_request(&step.request, name).err()),
+            .enumerate()
+            .filter(|(i, _)| !satisfied.get(*i).copied().unwrap_or(false))
+            .find_map(|(_, step)| validate::check_request(&step.request, name).err()),
     }
 }
 

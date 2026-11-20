@@ -1,16 +1,17 @@
 //! Workspace restore-readiness report ("Missing applications", "Supported restoration
 //! features", "Estimated restoration status").
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
-use reframe_platform::{Capability, Platform, SupportLevel};
+use reframe_platform::{Capability, LaunchTarget, Platform, SupportLevel};
 
-use crate::adapters::{AdapterRegistry, LaunchContext};
+use crate::adapters::{AdapterRegistry, LaunchContext, LaunchStep};
 use crate::model::{
     ApplicationEntry, CapabilityLevel, DesktopState, EntryHealth, RestoreEstimate, Workspace,
     WorkspaceHealth,
 };
-use crate::restoration::{layout, matcher, planner, validate};
+use crate::restoration::{layout, planner, reuse, validate};
 
 /// How ready `workspace` is to be restored on this machine, given a fresh desktop `state`.
 ///
@@ -24,8 +25,10 @@ use crate::restoration::{layout, matcher, planner, validate};
 ///   until the user edits the entry. `None` when nothing launchable is known.
 /// - `missing_paths`: saved files/folders ([`AppState::paths`](crate::model::AppState::paths))
 ///   and the working folder that no longer exist.
-/// - `capability`, `details`: from the adapter; `running`: the application currently has
-///   windows (it would be reused by a Merge/Replace switch).
+/// - `capability`, `details`: from the adapter; `running`: everything the entry opens is open
+///   already, so a Merge/Replace switch would reuse it without launching anything (the same
+///   decision as the restore: a project or folder counts when a window shows its name, a
+///   generic application when it has any window).
 ///
 /// The estimate counts *enabled* entries by what a restore could achieve: `unavailable` when
 /// the entry is not available or the adapter cannot restore it here, otherwise by the
@@ -42,10 +45,19 @@ pub fn workspace_health(
         platform,
         info: &state.info,
     };
+    // Enabled entries share running windows the way a restore hands them out.
+    let mut taken = HashSet::new();
     let entries: Vec<EntryHealth> = workspace
         .applications
         .iter()
-        .map(|entry| entry_health(entry, state, platform, adapters, &ctx))
+        .map(|entry| {
+            let plan = adapters.get(&entry.adapter_id).launch_plan(&ctx, entry);
+            let mut own = HashSet::new();
+            let taken = if entry.enabled { &mut taken } else { &mut own };
+            let running = reuse::decide_entry(entry, &plan, state, adapters, taken)
+                .is_some_and(|r| r.complete());
+            entry_health(entry, &plan, running, state, platform, adapters)
+        })
         .collect();
     let estimate = estimate(workspace, &entries);
     WorkspaceHealth {
@@ -60,10 +72,11 @@ pub fn workspace_health(
 
 fn entry_health(
     entry: &ApplicationEntry,
+    plan: &Result<Vec<LaunchStep>, String>,
+    running: bool,
     state: &DesktopState,
     platform: &dyn Platform,
     adapters: &AdapterRegistry,
-    ctx: &LaunchContext<'_>,
 ) -> EntryHealth {
     let name = entry.display_name.as_str();
     let adapter = adapters.get(&entry.adapter_id);
@@ -71,18 +84,24 @@ fn entry_health(
     let mut issues = Vec::new();
     let mut launch_target = None;
     let mut target_ok = false;
+    // The program itself is missing or unknown (not just a file or folder it should open).
+    let mut program_missing = true;
     let mut folder_ok = true;
 
-    match adapter.launch_plan(ctx, entry) {
+    match plan {
         Ok(steps) if steps.is_empty() => issues.push(format!(
             "Reframe doesn't know how to start {name} - edit the application to choose its location"
         )),
         Ok(steps) => {
-            match steps
-                .iter()
-                .find_map(|s| validate::check_target(&s.request.target, name).err())
-            {
-                Some(problem) => issues.push(problem),
+            match steps.iter().find_map(|s| {
+                validate::check_target(&s.request.target, name)
+                    .err()
+                    .map(|problem| (&s.request.target, problem))
+            }) {
+                Some((target, problem)) => {
+                    program_missing = !matches!(target, LaunchTarget::Open { .. });
+                    issues.push(problem);
+                }
                 None => {
                     target_ok = true;
                     launch_target = Some(steps[0].request.target.clone());
@@ -96,9 +115,9 @@ fn entry_health(
                 issues.push(problem);
             }
         }
-        Err(problem) => issues.push(problem),
+        Err(problem) => issues.push(problem.clone()),
     }
-    if !target_ok {
+    if !target_ok && program_missing {
         let found = platform
             .locate_application(&adapter.locate_query(&entry.app_id))
             .into_iter()
@@ -141,7 +160,7 @@ fn entry_health(
         available: target_ok && folder_ok,
         launch_target,
         missing_paths,
-        running: !matcher::running_windows_for_entry(entry, state, adapters).is_empty(),
+        running,
         details: adapter.describe(&entry.state),
         capability,
         issues,
@@ -450,6 +469,95 @@ mod tests {
         assert_eq!(e.issues.len(), 1);
         assert!(e.issues[0].contains("working folder"));
         assert_eq!(health.estimate.unavailable, 1);
+    }
+
+    /// Opens each saved folder through the OS handler (one `Open` step per folder).
+    struct FoldersAdapter;
+
+    impl AppAdapter for FoldersAdapter {
+        fn id(&self) -> &'static str {
+            "folders-test"
+        }
+        fn name(&self) -> &'static str {
+            "Folders (test)"
+        }
+        fn identify(&self, _: &ProcessInfo, _: &[&WindowInfo]) -> Option<AppIdentity> {
+            None
+        }
+        fn capability(&self, _: &PlatformInfo) -> AdapterCapability {
+            AdapterCapability::launch_only()
+        }
+        fn capture(&self, _: &CaptureContext<'_>, _: &CaptureInput<'_>) -> CaptureOutput {
+            CaptureOutput::default()
+        }
+        fn launch_plan(
+            &self,
+            _: &LaunchContext<'_>,
+            entry: &ApplicationEntry,
+        ) -> Result<Vec<LaunchStep>, String> {
+            Ok(entry
+                .state
+                .paths()
+                .into_iter()
+                .map(|path| LaunchStep {
+                    request: reframe_platform::LaunchRequest {
+                        target: LaunchTarget::Open {
+                            target: path.display().to_string(),
+                        },
+                        args: Vec::new(),
+                        working_directory: None,
+                        env: Vec::new(),
+                    },
+                    expected_windows: 1,
+                    title_hint: None,
+                })
+                .collect())
+        }
+        fn describe(&self, _: &AppState) -> Vec<StateDetail> {
+            Vec::new()
+        }
+        fn locate_query(&self, _: &str) -> LocateQuery {
+            LocateQuery {
+                executable_names: vec!["files".into()],
+                ..Default::default()
+            }
+        }
+    }
+
+    #[test]
+    fn a_missing_folder_is_not_blamed_on_the_program() {
+        let platform = MockPlatform::new();
+        let dir = tempfile::tempdir().unwrap();
+        let program = dir.path().join("files");
+        std::fs::write(&program, "").unwrap();
+        platform.install("files", LaunchTarget::Executable { path: program });
+        let kept = dir.path().join("kept");
+        std::fs::create_dir(&kept).unwrap();
+        let gone = dir.path().join("gone");
+        let mut files = ApplicationEntry::new("files", "Files", "folders-test");
+        files.state = AppState::Folders {
+            folders: [&kept, &gone]
+                .into_iter()
+                .map(|p| crate::model::FolderRef {
+                    path: p.clone(),
+                    window_title: None,
+                })
+                .collect(),
+        };
+        let mut ws = Workspace::new("Dev", "💻");
+        ws.applications = vec![files];
+        let adapters = AdapterRegistry::with_adapters(vec![Arc::new(FoldersAdapter)]);
+        let health = workspace_health(&ws, &state(&platform), &platform, &adapters);
+        let e = &health.entries[0];
+        assert!(!e.available);
+        assert_eq!(e.missing_paths, vec![gone.clone()]);
+        assert!(
+            e.issues.iter().all(|i| !i.contains("was found at")),
+            "the program is fine, only a folder is missing: {:?}",
+            e.issues
+        );
+        assert_eq!(e.launch_target, None);
+        assert!(e.issues[0].starts_with(&format!("{} no longer exists", gone.display())));
     }
 
     #[test]
