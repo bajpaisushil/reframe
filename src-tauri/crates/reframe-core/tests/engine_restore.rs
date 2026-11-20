@@ -14,8 +14,8 @@ use reframe_core::adapters::{
 };
 use reframe_core::model::{
     AdapterCapability, AppState, ApplicationEntry, CloseStatus, EntryProgress, EntryStatus,
-    ProjectRef, RestoreEvent, RestoreRun, RunStatus, StateDetail, SwitchMode, WindowSnapshot,
-    Workspace,
+    ProjectRef, RestoreEvent, RestoreRun, RunStatus, StateDetail, SwitchMode, SwitchPlan,
+    WindowSnapshot, Workspace,
 };
 use reframe_core::restoration::orchestrator::{
     ALREADY_RUNNING, ALREADY_RUNNING_ARRANGED, CANCELLED, CANCELLED_AFTER_START, STILL_OPEN,
@@ -280,10 +280,7 @@ impl Harness {
     ) -> Outcome {
         let env = RestoreEnv {
             platform,
-            adapters: Arc::new(AdapterRegistry::with_adapters(vec![
-                Arc::new(EDITOR),
-                Arc::new(DAEMON),
-            ])),
+            adapters: Arc::new(adapters()),
             timing: timing(),
         };
         let events: Arc<Mutex<Vec<(Instant, RestoreEvent)>>> = Arc::default();
@@ -358,6 +355,28 @@ impl Outcome {
     fn run_started(&self) -> Instant {
         self.events[0].0
     }
+}
+
+fn adapters() -> AdapterRegistry {
+    AdapterRegistry::with_adapters(vec![Arc::new(EDITOR), Arc::new(DAEMON)])
+}
+
+/// What the switch planner proposes for the harness desktop as it is now.
+fn switch_plan(h: &Harness, ws: &Workspace, mode: SwitchMode) -> SwitchPlan {
+    let state = reframe_core::discovery::gather(&h.platform);
+    reframe_core::switching::plan_switch(&state, &adapters(), &state.info, None, ws, mode)
+}
+
+/// Whether the health report says the entry would be reused without launching anything.
+fn health_says_running(h: &Harness, ws: &Workspace, id: Uuid) -> bool {
+    let state = reframe_core::discovery::gather(&h.platform);
+    let health = reframe_core::health::workspace_health(ws, &state, &h.platform, &adapters());
+    health
+        .entries
+        .iter()
+        .find(|e| e.entry_id == id)
+        .expect("entry health")
+        .running
 }
 
 fn options(mode: SwitchMode) -> RestoreOptions {
@@ -940,7 +959,7 @@ fn windows_are_matched_to_snapshots_by_title() {
 }
 
 #[test]
-fn multi_step_single_instance_launch_uses_title_hints() {
+fn multi_step_single_instance_launch_places_each_project_window() {
     let h = Harness::new();
     let editor_pid = h.platform.add_process("editor", Some(h.exe("editor-app")));
     let alpha = h.dir.path().join("proj-alpha");
@@ -986,6 +1005,37 @@ fn multi_step_single_instance_launch_uses_title_hints() {
     assert_eq!(h.platform.launches().len(), 2);
     assert_eq!(h.window_titled("proj-alpha — Editor").bounds, alpha_at);
     assert_eq!(h.window_titled("proj-beta — Editor").bounds, beta_at);
+}
+
+#[test]
+fn every_window_gets_a_saved_position_when_titles_changed_after_relaunch() {
+    let h = Harness::new();
+    h.platform
+        .add_rule(h.rule("app-sketch", &["Untitled 1", "Untitled 2"]));
+    let mut sketch = h.app("app-sketch");
+    let first_at = Rect::new(0, 0, 700, 500);
+    let second_at = Rect::new(800, 300, 700, 500);
+    sketch.windows = vec![
+        snapshot("logo.svg - Sketch", first_at, None),
+        snapshot("banner.svg - Sketch", second_at, None),
+    ];
+    let out = h.run(&workspace(vec![sketch.clone()]), SwitchMode::Merge);
+
+    let e = out.entry(sketch.id);
+    assert_eq!(e.status, EntryStatus::Completed, "{:?}", e.message);
+    assert_eq!((e.windows_restored, e.windows_expected), (2, 2));
+    let mut placed: Vec<Rect> = h
+        .platform
+        .placements()
+        .iter()
+        .map(|(_, p)| p.bounds)
+        .collect();
+    placed.sort_by_key(|r| r.x);
+    assert_eq!(
+        placed,
+        vec![first_at, second_at],
+        "no title matches, yet both are placed"
+    );
 }
 
 #[test]
@@ -1333,6 +1383,321 @@ fn merge_reuses_running_apps_without_launching_them() {
         Some(ALREADY_RUNNING)
     );
     assert!(h.platform.placements().is_empty() && h.platform.launches().is_empty());
+}
+
+/// An editor entry with one project folder per name (one launch step each, hinted with the
+/// folder name), plus the already-running single-instance editor process that owns its
+/// windows. Each project opens one window titled "<name> — Editor" when launched.
+fn editor_with_projects(h: &Harness, names: &[&str]) -> (ApplicationEntry, u32) {
+    let editor_pid = h.platform.add_process("editor", Some(h.exe("editor-app")));
+    let mut projects = Vec::new();
+    for name in names {
+        let path = h.dir.path().join(name);
+        std::fs::create_dir_all(&path).unwrap();
+        h.platform.add_rule(
+            LaunchRule::new(*name)
+                .window(MockWindowSpec::titled(format!("{name} — Editor")))
+                .single_instance(editor_pid),
+        );
+        projects.push(ProjectRef {
+            path,
+            is_workspace_file: false,
+            window_title: None,
+        });
+    }
+    let mut editor = ApplicationEntry::new("editor", "Editor", "editor-test");
+    editor.launch.executable = Some(h.exe("editor-app"));
+    editor.state = AppState::Projects { projects };
+    (editor, editor_pid)
+}
+
+fn launched_labels(h: &Harness) -> Vec<String> {
+    h.platform
+        .launches()
+        .iter()
+        .map(|l| l.target.label())
+        .collect()
+}
+
+#[test]
+fn merge_launches_only_the_projects_that_are_not_open() {
+    let h = Harness::new();
+    let (mut editor, editor_pid) = editor_with_projects(&h, &["proj-alpha", "proj-beta"]);
+    // proj-alpha is already open (with a file title around the folder name); proj-beta is not.
+    let alpha_window = h.platform.add_window(
+        editor_pid,
+        "main.rs — proj-alpha — Editor",
+        None,
+        Rect::new(0, 0, 400, 300),
+    );
+    let alpha_at = Rect::new(0, 0, 960, 1040);
+    let beta_at = Rect::new(960, 0, 960, 1040);
+    editor.windows = vec![
+        snapshot("main.rs — proj-alpha — Editor", alpha_at, Some("MOCK-1")),
+        snapshot("lib.rs — proj-beta — Editor", beta_at, Some("MOCK-1")),
+    ];
+    let ws = workspace(vec![editor.clone()]);
+
+    let plan = switch_plan(&h, &ws, SwitchMode::Merge);
+    assert!(plan.reuse.is_empty(), "{:?}", plan.reuse);
+    assert_eq!(plan.launch.len(), 1);
+    assert_eq!(plan.launch[0].reason, "1 of 2 projects not open");
+    assert!(!health_says_running(&h, &ws, editor.id));
+
+    let out = h.run(&ws, SwitchMode::Merge);
+    let beta = h.dir.path().join("proj-beta").display().to_string();
+    assert_eq!(
+        launched_labels(&h),
+        vec![beta],
+        "only the missing project opens"
+    );
+    let e = out.entry(editor.id);
+    assert_eq!(e.status, EntryStatus::Completed, "{:?}", e.message);
+    assert_eq!(
+        e.message.as_deref(),
+        Some("Opened 1 of 2 projects; 1 was already open")
+    );
+    assert_eq!((e.windows_restored, e.windows_expected), (2, 2));
+    assert_eq!(h.platform.window(&alpha_window).unwrap().bounds, alpha_at);
+    assert_eq!(h.window_titled("proj-beta — Editor").bounds, beta_at);
+}
+
+#[test]
+fn merge_reuses_an_entry_whose_projects_are_all_open() {
+    let h = Harness::new();
+    let (mut editor, editor_pid) = editor_with_projects(&h, &["proj-alpha", "proj-beta"]);
+    let beta_window = h.platform.add_window(
+        editor_pid,
+        "proj-beta — Editor",
+        None,
+        Rect::new(0, 0, 400, 300),
+    );
+    let alpha_window = h.platform.add_window(
+        editor_pid,
+        "x.rs — PROJ-ALPHA — Editor",
+        None,
+        Rect::new(0, 0, 400, 300),
+    );
+    let alpha_at = Rect::new(0, 0, 960, 1040);
+    let beta_at = Rect::new(960, 0, 960, 1040);
+    editor.windows = vec![
+        snapshot("proj-alpha — Editor", alpha_at, Some("MOCK-1")),
+        snapshot("proj-beta — Editor", beta_at, Some("MOCK-1")),
+    ];
+    let ws = workspace(vec![editor.clone()]);
+
+    let plan = switch_plan(&h, &ws, SwitchMode::Merge);
+    assert!(plan.launch.is_empty(), "{:?}", plan.launch);
+    assert_eq!(plan.reuse.len(), 1);
+    assert_eq!(
+        plan.reuse[0].window_ids,
+        vec![alpha_window.clone(), beta_window.clone()]
+    );
+    assert!(health_says_running(&h, &ws, editor.id));
+
+    let out = h.run(&ws, SwitchMode::Merge);
+    assert!(h.platform.launches().is_empty());
+    let e = out.entry(editor.id);
+    assert_eq!(e.status, EntryStatus::Completed);
+    assert_eq!(e.message.as_deref(), Some(ALREADY_RUNNING_ARRANGED));
+    assert_eq!(e.windows_restored, 2);
+    assert_eq!(h.platform.window(&alpha_window).unwrap().bounds, alpha_at);
+    assert_eq!(h.platform.window(&beta_window).unwrap().bounds, beta_at);
+}
+
+#[test]
+fn an_editor_open_on_other_projects_does_not_count_as_restored() {
+    let h = Harness::new();
+    let (editor, editor_pid) = editor_with_projects(&h, &["proj-alpha", "proj-beta"]);
+    // Another project, and one whose name merely contains "proj-alpha".
+    let started_at = Rect::new(0, 0, 400, 300);
+    let gamma = h
+        .platform
+        .add_window(editor_pid, "proj-gamma — Editor", None, started_at);
+    let similar = h
+        .platform
+        .add_window(editor_pid, "proj-alpha-v2 — Editor", None, started_at);
+    let ws = workspace(vec![editor.clone()]);
+
+    let plan = switch_plan(&h, &ws, SwitchMode::Merge);
+    assert!(plan.reuse.is_empty(), "{:?}", plan.reuse);
+    assert_eq!(plan.launch[0].reason, "2 of 2 projects not open");
+    assert!(!health_says_running(&h, &ws, editor.id));
+
+    let out = h.run(&ws, SwitchMode::Merge);
+    assert_eq!(h.platform.launches().len(), 2, "both projects are opened");
+    let e = out.entry(editor.id);
+    assert_eq!(e.status, EntryStatus::Completed, "{:?}", e.message);
+    assert_eq!(e.message, None);
+    assert_eq!((e.windows_restored, e.windows_expected), (2, 2));
+    for other in [gamma, similar] {
+        assert_eq!(h.platform.window(&other).unwrap().bounds, started_at);
+    }
+}
+
+#[test]
+fn additive_launches_every_project_even_when_open() {
+    let h = Harness::new();
+    let (editor, editor_pid) = editor_with_projects(&h, &["proj-alpha", "proj-beta"]);
+    h.platform.add_window(
+        editor_pid,
+        "proj-alpha — Editor",
+        None,
+        Rect::new(0, 0, 400, 300),
+    );
+    let ws = workspace(vec![editor.clone()]);
+
+    let plan = switch_plan(&h, &ws, SwitchMode::Additive);
+    assert!(plan.reuse.is_empty());
+    assert!(plan.launch[0].reason.starts_with("Additive mode"));
+
+    let out = h.run(&ws, SwitchMode::Additive);
+    assert_eq!(h.platform.launches().len(), 2);
+    let e = out.entry(editor.id);
+    assert_eq!(e.status, EntryStatus::Completed, "{:?}", e.message);
+    assert_eq!(e.message, None);
+    assert_eq!((e.windows_restored, e.windows_expected), (2, 2));
+}
+
+#[test]
+fn generic_apps_are_still_reused_per_application() {
+    let h = Harness::new();
+    // The window shows a different document than the saved one: still the same application.
+    let window = h.running("app-notes", "Untitled — Notes", Rect::new(0, 0, 300, 300));
+    let mut notes = h.app("app-notes");
+    let saved = Rect::new(500, 400, 640, 480);
+    notes.windows = vec![snapshot("todo — Notes", saved, None)];
+    let ws = workspace(vec![notes.clone()]);
+
+    let plan = switch_plan(&h, &ws, SwitchMode::Merge);
+    assert!(plan.launch.is_empty());
+    assert_eq!(plan.reuse[0].window_ids, vec![window.clone()]);
+    assert!(health_says_running(&h, &ws, notes.id));
+
+    let out = h.run(&ws, SwitchMode::Merge);
+    assert!(h.platform.launches().is_empty());
+    assert_eq!(
+        out.entry(notes.id).message.as_deref(),
+        Some(ALREADY_RUNNING_ARRANGED)
+    );
+    assert_eq!(h.platform.window(&window).unwrap().bounds, saved);
+}
+
+#[test]
+fn a_partly_open_entry_arranges_its_open_windows_when_the_rest_cannot_start() {
+    let h = Harness::new();
+    let (mut editor, editor_pid) = editor_with_projects(&h, &["proj-alpha", "proj-beta"]);
+    let alpha_window = h.platform.add_window(
+        editor_pid,
+        "proj-alpha — Editor",
+        None,
+        Rect::new(0, 0, 400, 300),
+    );
+    let beta = h.dir.path().join("proj-beta");
+    std::fs::remove_dir(&beta).unwrap();
+    let alpha_at = Rect::new(100, 100, 800, 600);
+    editor.windows = vec![
+        snapshot("proj-alpha — Editor", alpha_at, Some("MOCK-1")),
+        snapshot(
+            "proj-beta — Editor",
+            Rect::new(900, 100, 800, 600),
+            Some("MOCK-1"),
+        ),
+    ];
+    let mut ws = workspace(vec![editor.clone()]);
+    ws.restore.timeout_ms = 10_000;
+    let out = h.run(&ws, SwitchMode::Merge);
+
+    assert!(h.platform.launches().is_empty());
+    let e = out.entry(editor.id);
+    assert_eq!(e.status, EntryStatus::PartiallyCompleted);
+    assert_eq!(
+        e.message.as_deref(),
+        Some(
+            format!(
+                "1 of 2 windows reopened; 1 of 1 launches failed: {} no longer exists, so Editor cannot open it - edit the application; 1 of 2 projects was already open",
+                beta.display()
+            )
+            .as_str()
+        )
+    );
+    assert_eq!((e.windows_restored, e.windows_expected), (1, 2));
+    assert_eq!(h.platform.window(&alpha_window).unwrap().bounds, alpha_at);
+    assert!(
+        out.elapsed < ms(5_000),
+        "nothing to wait for: {:?}",
+        out.elapsed
+    );
+}
+
+#[test]
+fn a_running_window_is_reused_by_one_entry_only() {
+    let h = Harness::new();
+    let open = h.running("app-term", "Terminal", Rect::new(0, 0, 300, 300));
+    h.platform.add_rule(h.rule("app-term", &["Terminal 2"]));
+    let first_at = Rect::new(0, 0, 600, 400);
+    let second_at = Rect::new(700, 0, 600, 400);
+    let mut first = h.app("app-term");
+    first.windows = vec![snapshot("Terminal", first_at, None)];
+    let mut second = h.app("app-term");
+    second.id = Uuid::new_v4();
+    second.windows = vec![snapshot("Terminal", second_at, None)];
+    let ws = workspace(vec![first.clone(), second.clone()]);
+
+    let plan = switch_plan(&h, &ws, SwitchMode::Merge);
+    assert_eq!(plan.reuse.len(), 1);
+    assert_eq!(plan.reuse[0].entry_id, first.id);
+    assert_eq!(plan.reuse[0].window_ids, vec![open.clone()]);
+    assert_eq!(plan.launch.len(), 1);
+    assert_eq!(plan.launch[0].entry_id, second.id);
+    assert_eq!(plan.launch[0].reason, "Not running");
+    assert!(health_says_running(&h, &ws, first.id));
+    assert!(!health_says_running(&h, &ws, second.id));
+
+    let out = h.run(&ws, SwitchMode::Merge);
+    assert_eq!(h.platform.launches().len(), 1);
+    assert_eq!(
+        out.entry(first.id).message.as_deref(),
+        Some(ALREADY_RUNNING_ARRANGED)
+    );
+    assert_eq!(out.entry(second.id).status, EntryStatus::Completed);
+    assert_eq!(h.platform.window(&open).unwrap().bounds, first_at);
+    assert_eq!(h.window_titled("Terminal 2").bounds, second_at);
+}
+
+#[test]
+fn reused_windows_that_cannot_be_moved_make_the_entry_partial() {
+    let h = Harness::new();
+    h.running("app-notes", "todo — Notes", Rect::new(0, 0, 300, 300));
+    let mut notes = h.app("app-notes");
+    notes.windows = vec![snapshot(
+        "todo — Notes",
+        Rect::new(500, 400, 640, 480),
+        None,
+    )];
+    let faulty = Faulty {
+        inner: h.platform.clone(),
+        fail_moves: true,
+        ..Default::default()
+    };
+    let out = h.run_with(
+        Arc::new(faulty),
+        &workspace(vec![notes.clone()]),
+        options(SwitchMode::Merge),
+        Arc::new(AtomicBool::new(false)),
+        |_, _| {},
+    );
+
+    assert!(h.platform.launches().is_empty());
+    let e = out.entry(notes.id);
+    assert_eq!(e.status, EntryStatus::PartiallyCompleted);
+    assert_eq!(
+        e.message.as_deref(),
+        Some(
+            "Already running - its windows could not be moved: Moving the window failed: denied by the test"
+        )
+    );
+    assert_eq!(out.run.status, RunStatus::PartiallyCompleted);
 }
 
 #[test]

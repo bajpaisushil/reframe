@@ -583,6 +583,70 @@ mod tests {
         assert_eq!((r.width, r.height), (800, 600));
     }
 
+    /// Deterministic pseudo-random layouts: whatever the saved and connected displays look
+    /// like, a remapped window is fully visible and has a usable size.
+    #[test]
+    fn randomized_layouts_never_produce_off_screen_windows() {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = |range: i32| -> i32 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            i32::try_from(seed % u64::from(range.unsigned_abs())).unwrap()
+        };
+        let sizes = [
+            (1280, 720),
+            (1366, 768),
+            (1920, 1080),
+            (2560, 1440),
+            (3840, 2160),
+        ];
+        for case in 0..3000 {
+            let layout = |count: usize, prefix: &str, next: &mut dyn FnMut(i32) -> i32| {
+                let mut x = next(4000) - 2000;
+                (0..count)
+                    .map(|i| {
+                        let (w, h) = sizes[usize::try_from(next(5)).unwrap()];
+                        let y = next(1200) - 600;
+                        let mut m = monitor(&format!("{prefix}{}", next(4)), x, y, w, h, i == 0);
+                        // Work areas: taskbar at the bottom, the left, or missing entirely.
+                        m.work_area = match next(3) {
+                            0 => Rect::new(x, y, w, h - 48),
+                            1 => Rect::new(x + 64, y, w - 64, h),
+                            _ => Rect::new(0, 0, 0, 0),
+                        };
+                        x += w + next(300) - 150; // gaps and overlaps
+                        m
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let saved_count = usize::try_from(next(4)).unwrap();
+            let saved = layout(saved_count, "S", &mut next);
+            let current_count = 1 + usize::try_from(next(3)).unwrap();
+            let current = layout(current_count, "S", &mut next);
+            let monitor_id = match next(3) {
+                0 => None,
+                1 => saved.first().map(|m| m.id.clone()),
+                _ => Some("unknown".to_string()),
+            };
+            let w = window(
+                Rect::new(
+                    next(12000) - 6000,
+                    next(6000) - 3000,
+                    next(5000) - 100,
+                    next(3000) - 100,
+                ),
+                monitor_id.as_deref(),
+            );
+            let r = remap_bounds(&w, &saved, &current);
+            assert!(
+                r.width > 0 && r.height > 0 && fully_visible(r, &current),
+                "case {case}: {r:?} from {:?} on {saved:?} -> {current:?}",
+                w.bounds
+            );
+        }
+    }
+
     #[test]
     fn desktop_wide_work_area_is_restricted_to_the_monitor() {
         let mut m = monitor("B", 1920, 0, 1920, 1080, false);
