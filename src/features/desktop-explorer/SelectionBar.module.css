@@ -1,0 +1,44 @@
+/* Sticky inside the page's scroll container: floats over long lists, rests after the content.
+   Aligned with the list's start edge, clear of the toasts in the bottom-right corner. */
+.dock {
+  position: sticky;
+  bottom: var(--space-5);
+  z-index: var(--z-sticky);
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--space-8);
+  pointer-events: none;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-overlay);
+  pointer-events: auto;
+  animation: bar-in var(--duration-slow) var(--ease-out);
+}
+
+.count {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+@keyframes bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}

@@ -1,0 +1,199 @@
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  margin: 0;
+}
+
+/* The "desk" the screens stand on: a quiet band, not a card. */
+.desk {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Extra room at the bottom for the screen names underneath. */
+  padding: var(--space-5) var(--space-6) var(--space-8);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+}
+
+.monitor {
+  position: absolute;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-sunken);
+}
+
+.window {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--bg-raised);
+  transition:
+    background-color var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out);
+}
+
+/* A hint of a title bar makes the rectangles read as windows. */
+.window::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--border);
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+/* Opaque tints (the soft accent layered on the window color), so stacked windows cover each other
+   the way real ones do. */
+.window[data-selected] {
+  border-color: var(--accent-border);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-raised);
+}
+
+.window[data-selected]::before {
+  background: var(--accent-border);
+}
+
+.stage[data-hovering] .window:not([data-highlighted]) {
+  opacity: 0.42;
+}
+
+.window[data-highlighted] {
+  border-color: var(--accent);
+}
+
+.window[data-highlighted]::before {
+  background: var(--accent);
+}
+
+.window[data-highlighted][data-selected] {
+  background: linear-gradient(var(--accent-soft-hover), var(--accent-soft-hover)), var(--bg-raised);
+}
+
+.window[data-focused] {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.windowIcon {
+  opacity: 0.9;
+}
+
+.window:not([data-selected]) .windowIcon {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.window[data-highlighted] .windowIcon {
+  filter: none;
+  opacity: 1;
+}
+
+.monitorLabel {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+.monitorLabelBelow {
+  padding: 0;
+  background: none;
+  transform: none;
+}
+
+.primary {
+  color: var(--accent-text);
+}
+
+.primary::before {
+  content: "·";
+  margin-right: var(--space-1-5);
+  color: var(--text-tertiary);
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 18px;
+  padding: 0 var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.captionText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.captionActive {
+  color: var(--text-secondary);
+}
+
+.captionSide {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: none;
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.swatch {
+  width: 10px;
+  height: 8px;
+  margin-left: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--bg-raised);
+}
+
+.swatch:first-child {
+  margin-left: 0;
+}
+
+.swatchSelected {
+  border-color: var(--accent-border);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-raised);
+}
+
+.checked {
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .legend {
+    display: none;
+  }
+}

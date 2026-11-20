@@ -1,0 +1,43 @@
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* Same footprint as the mini-map's desk, so nothing jumps when the scan arrives. */
+.deskSkeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-6) var(--space-8);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  margin-bottom: 28px;
+}
+
+.nothingOpen {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.blockedHint {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.footnote {
+  margin-top: calc(-1 * var(--space-4));
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}

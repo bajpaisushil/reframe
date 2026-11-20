@@ -1,0 +1,372 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.dialog {
+  gap: var(--space-6);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dialog .sectionHeader {
+  margin-bottom: var(--space-2);
+}
+
+.dialog .sectionHeader h3 {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+.sectionEmpty {
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  text-align: center;
+}
+
+.sectionDescription {
+  margin: 0 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+/* A ghost button's label lines up with the list edge below it. */
+.bulkAction {
+  margin-right: calc(-1 * var(--space-2-5));
+}
+
+/* ---- Collapsible section (Utilities) ------------------------------------------------------- */
+
+.collapsibleHeading {
+  display: flex;
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  letter-spacing: var(--tracking-snug);
+}
+
+.dialog .collapsibleHeading {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+.collapseButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: -6px;
+  padding: 2px 8px 2px 4px;
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-semibold);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.collapseButton:hover {
+  background: var(--bg-hover);
+}
+
+.collapseChevron {
+  color: var(--text-tertiary);
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.collapseButton[aria-expanded="true"] .collapseChevron {
+  transform: rotate(90deg);
+}
+
+.headingCount {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.headingNote {
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+}
+
+.collapsibleBody {
+  margin-top: var(--space-2);
+  animation: reveal var(--duration-slow) var(--ease-out);
+}
+
+/* ---- Rows ------------------------------------------------------------------------------------ */
+
+.rows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.row {
+  border-top: 1px solid var(--border-subtle);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: var(--space-2-5) var(--space-3) var(--space-2-5) var(--space-4);
+}
+
+.dialog .main {
+  min-height: 54px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+}
+
+.row:hover > .main,
+.row[data-highlighted] > .main {
+  background: var(--bg-hover);
+}
+
+.row[data-locked] .appIcon {
+  opacity: 0.5;
+  filter: grayscale(0.6);
+}
+
+.row[data-locked] .name {
+  color: var(--text-secondary);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-medium);
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  white-space: nowrap;
+}
+
+.metaQuiet {
+  display: block;
+  text-overflow: ellipsis;
+  color: var(--text-tertiary);
+}
+
+.detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail + .detail::before,
+.detail + .moreDetails::before {
+  content: "·";
+  margin: 0 var(--space-1-5);
+  color: var(--icon-muted);
+}
+
+.moreDetails {
+  flex: none;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-xs);
+}
+
+.tooltipLines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.windowsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-sm);
+  padding: 0 var(--space-1-5) 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.windowsToggle:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.chevron {
+  color: var(--icon-muted);
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.windowsToggle[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+.menuButton {
+  color: var(--icon-muted);
+}
+
+/* ---- Windows of an app ---------------------------------------------------------------------- */
+
+.windows {
+  padding: var(--space-1) var(--space-3) var(--space-2) 84px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  animation: reveal var(--duration-slow) var(--ease-out);
+}
+
+.dialog .windows {
+  padding-left: 80px;
+}
+
+.windowRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2-5);
+  min-height: 36px;
+  margin: 0 calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.windowRow[data-highlighted] {
+  background: var(--bg-hover);
+}
+
+.windowRow[data-interactive]:hover {
+  background: var(--bg-hover);
+}
+
+.windowBullet {
+  width: 16px;
+  height: 16px;
+  position: relative;
+}
+
+.windowBullet::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--icon-muted);
+}
+
+.windowTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.windowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  white-space: nowrap;
+}
+
+.monitorName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.size {
+  min-width: 84px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-variant-ligatures: none;
+}
+
+/* ---- Footer controls ----------------------------------------------------------------------- */
+
+.systemToggle {
+  justify-content: flex-start;
+  align-items: center;
+  width: max-content;
+  flex-direction: row-reverse;
+  gap: var(--space-2-5);
+}
+
+.systemToggle label {
+  font-weight: var(--weight-regular);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* ---- Skeleton -------------------------------------------------------------------------------- */
+
+.skeletonHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}

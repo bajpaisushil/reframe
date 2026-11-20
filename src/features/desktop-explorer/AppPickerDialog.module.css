@@ -1,0 +1,45 @@
+.content:focus,
+.content:focus-visible {
+  outline: none;
+}
+
+/* Scan status in the Applications header, separated from "Select all" by a hairline. */
+.scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.scan:not(:last-child) {
+  padding-right: var(--space-2);
+  margin-right: var(--space-1);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.scanned {
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+/* "Choose an app manually…" sits at the start of the footer, away from Cancel / confirm. */
+.footerStart {
+  display: flex;
+  margin-right: auto;
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: var(--space-2);
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.22);
+  font-size: var(--text-xs);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
