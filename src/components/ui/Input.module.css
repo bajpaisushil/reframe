@@ -1,0 +1,114 @@
+.control {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  box-shadow: var(--shadow-control);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.control::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+
+.control:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong);
+}
+
+/* Text fields always show where typing goes (not only for keyboard focus). */
+.control:focus,
+.control:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.control[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.control[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.control:disabled {
+  opacity: 0.55;
+  background: var(--bg-sunken);
+}
+
+.input {
+  height: var(--control-md);
+  padding: 0 10px;
+}
+
+.input.sm {
+  height: var(--control-sm);
+  padding: 0 8px;
+  font-size: var(--text-sm);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-ligatures: none;
+}
+
+.iconWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.leadingIcon {
+  position: absolute;
+  left: 10px;
+  color: var(--icon-muted);
+  pointer-events: none;
+}
+
+.withIcon {
+  padding-left: 32px;
+}
+
+.textarea {
+  display: block;
+  min-height: 76px;
+  padding: 7px 10px;
+  resize: vertical;
+}
+
+.selectWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+}
+
+.select {
+  height: var(--control-md);
+  padding: 0 30px 0 10px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: default;
+}
+
+.select.sm {
+  height: var(--control-sm);
+  font-size: var(--text-sm);
+}
+
+.chevron {
+  position: absolute;
+  right: 10px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}

@@ -1,0 +1,81 @@
+.page {
+  width: 100%;
+  max-width: calc(var(--content-max) + 2 * var(--page-pad-x));
+  margin: 0 auto;
+  padding: var(--space-10) var(--page-pad-x) var(--space-16);
+}
+
+.wide {
+  max-width: none;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: max-content;
+  margin-left: -4px;
+  padding: 2px 6px 2px 2px;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: default;
+}
+
+.back:hover {
+  color: var(--text-primary);
+  text-decoration: none;
+  background: var(--bg-hover);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+}
+
+.leading {
+  flex: none;
+}
+
+/* A small basis keeps the actions beside the title down to the 980px minimum window width. */
+.titles {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-xl);
+  line-height: var(--leading-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  overflow-wrap: anywhere;
+}
+
+.title:focus {
+  outline: none;
+}
+
+.subtitle {
+  margin-top: var(--space-1);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: none;
+}

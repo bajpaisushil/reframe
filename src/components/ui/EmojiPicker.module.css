@@ -1,0 +1,67 @@
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2);
+}
+
+.grid {
+  display: grid;
+  gap: 2px;
+}
+
+.cell {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  font-size: 19px;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.cell:hover {
+  background: var(--bg-hover);
+}
+
+.cell:active {
+  transform: scale(0.92);
+}
+
+.cell:focus-visible {
+  outline-offset: 0;
+}
+
+.selected,
+.selected:hover {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  padding: var(--space-3) var(--space-1) var(--space-1);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.customLabel {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.customRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.error {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--danger-text);
+}

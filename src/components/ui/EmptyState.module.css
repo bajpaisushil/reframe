@@ -1,0 +1,77 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+}
+
+.page {
+  padding: var(--space-16) var(--space-6);
+}
+
+.compact {
+  padding: var(--space-8) var(--space-5);
+  gap: var(--space-3);
+}
+
+.iconWrap {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.compact .iconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.danger .iconWrap {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger-text);
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  max-width: 440px;
+}
+
+.title {
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+}
+
+.compact .title {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+}
+
+.text {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+}
+
+.compact .text {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}

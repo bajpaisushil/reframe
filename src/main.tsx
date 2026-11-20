@@ -5,9 +5,16 @@ import "@fontsource-variable/geist-mono";
 import "./styles/tokens.css";
 import "./styles/global.css";
 import { App } from "./App";
+import { bootstrapTheme } from "./lib/theme";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Apply the remembered theme before the first render (no flash of the wrong theme).
+bootstrapTheme();
+
+const container = document.getElementById("root");
+if (container) {
+  createRoot(container).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}

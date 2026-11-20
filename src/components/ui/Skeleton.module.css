@@ -1,0 +1,28 @@
+.skeleton {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  border-radius: var(--radius-xs);
+  background: var(--skeleton-base);
+  animation: pulse 1.4s var(--ease-in-out) infinite;
+}
+
+.text {
+  border-radius: var(--radius-pill);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+  }
+}

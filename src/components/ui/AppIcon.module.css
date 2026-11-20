@@ -1,0 +1,34 @@
+.icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.fallback {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(24, 24, 27, 0.05);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.s20 {
+  font-size: 9px;
+}
+
+.s28 {
+  font-size: 11px;
+}
+
+.s36 {
+  font-size: 13px;
+}
