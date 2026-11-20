@@ -1,0 +1,13 @@
+.logo {
+  display: block;
+  flex: none;
+}
+
+/* A faint ring keeps the dark tile visible on the dark sidebar. */
+.ring {
+  stroke: transparent;
+}
+
+:root[data-theme="dark"] .ring {
+  stroke: rgba(255, 255, 255, 0.14);
+}

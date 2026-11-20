@@ -1,0 +1,136 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  animation: fade-in var(--duration-slow) var(--ease-out);
+}
+
+.positioner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  overflow-y: auto;
+}
+
+.dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-overlay);
+  animation: dialog-in var(--duration-slow) var(--ease-out);
+}
+
+.sm {
+  max-width: 400px;
+}
+
+.md {
+  max-width: 480px;
+}
+
+.lg {
+  max-width: 640px;
+}
+
+.root[data-state="closed"] {
+  pointer-events: none;
+}
+
+.root[data-state="closed"] .scrim {
+  animation: fade-out 140ms var(--ease-out) forwards;
+}
+
+.root[data-state="closed"] .dialog {
+  animation: dialog-out 140ms var(--ease-out) forwards;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+}
+
+.description {
+  margin-top: var(--space-1);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+}
+
+.close {
+  margin: -2px -6px 0 0;
+}
+
+.body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+/* No body: give the footer some room under the description. */
+.header + .footer {
+  margin-top: var(--space-5);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+}

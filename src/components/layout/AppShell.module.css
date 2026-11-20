@@ -1,0 +1,58 @@
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg-app);
+}
+
+/* The content sits on a "sheet": paper on the desk, framed by a hairline (no shadow). */
+.main {
+  position: relative;
+  min-width: 0;
+  margin: var(--sheet-inset) var(--sheet-inset) var(--sheet-inset) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  overflow-x: hidden;
+  /* Always reserve the (transparent) scrollbar track so pages of different heights don't shift
+     sideways; WebKitGTK ignores scrollbar-gutter, other engines get it as well. */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.main:focus {
+  outline: none;
+}
+
+.view {
+  min-height: 100%;
+  animation: view-in var(--duration-slow) var(--ease-out);
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.skipLink {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: var(--weight-medium);
+  transform: translateY(-200%);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.skipLink:focus-visible {
+  transform: none;
+  text-decoration: none;
+}

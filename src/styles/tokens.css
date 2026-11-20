@@ -1,2 +1,348 @@
-/* Design tokens — defined by the design-system work. */
-:root {}
+/*
+ * Reframe design tokens — "graphite & paper" with one accent (Reframe indigo).
+ *
+ * The light palette lives on :root. The dark palette applies when <html data-theme="dark"> is
+ * set (explicit choice) or, before the app has decided, when the OS prefers dark and no explicit
+ * light theme is set. The theme provider always stamps data-theme once settings are known.
+ *
+ * Contrast (WCAG 2.x, measured against the backgrounds each token is used on):
+ * - Text tokens are >= 4.5:1. The art-direction tertiary grey (#8E8E96 light / #71717A dark) is
+ *   only ~3.3:1, so it is kept as --icon-muted for decorative glyphs and disabled states, while
+ *   --text-tertiary is a slightly deeper grey that passes AA.
+ * - Accent text on tinted backgrounds uses --accent-text (#5B4BF0 light: 4.8:1 on #EEEBFF;
+ *   #A196FF dark: 6:1 on the dark tint) because #6D5DFC on #EEEBFF is only 3.9:1.
+ * - White on --accent is 4.55:1, on --danger 4.8:1.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Surfaces ---------------------------------------------------------------------- */
+  --bg-app: #f6f5f2;
+  --bg-surface: #ffffff;
+  --bg-subtle: #fafaf8;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f1f0ec;
+  --bg-hover: rgba(24, 24, 27, 0.045);
+  --bg-active: rgba(24, 24, 27, 0.075);
+  --bg-inverse: #18181b;
+
+  /* ---- Lines -------------------------------------------------------------------------- */
+  --border: #e6e4df;
+  --border-subtle: #efede9;
+  --border-strong: #d7d4cd;
+  --border-control: #dcd9d2;
+  --bg-control: #ffffff;
+  --bg-control-hover: #fafaf8;
+  --tooltip-bg: #1f1f23;
+  --tooltip-fg: #f4f4f5;
+  --tooltip-border: rgba(255, 255, 255, 0.06);
+
+  /* ---- Text --------------------------------------------------------------------------- */
+  --text-primary: #18181b;
+  --text-secondary: #5f5f67;
+  --text-tertiary: #6e6e76;
+  --text-inverse: #fafaf8;
+  --icon-muted: #8e8e96;
+  --text-disabled: #a3a3aa;
+
+  /* ---- Accent (Reframe indigo) --------------------------------------------------------- */
+  --accent: #6d5dfc;
+  --accent-hover: #5b4bf0;
+  --accent-pressed: #5040e0;
+  --accent-soft: #eeebff;
+  --accent-soft-hover: #e5e0ff;
+  --accent-text: #5b4bf0;
+  --accent-border: rgba(109, 93, 252, 0.35);
+  --on-accent: #ffffff;
+  --accent-glow: rgba(109, 93, 252, 0.1);
+
+  /* ---- Semantic ---------------------------------------------------------------------- */
+  --success: #16a34a;
+  --success-soft: #e8f6ed;
+  --success-text: #15803d;
+  --warning: #d97706;
+  --warning-soft: #fdf2e2;
+  --warning-text: #b45309;
+  --danger: #dc2626;
+  --danger-hover: #c81e1e;
+  --danger-soft: #fdecec;
+  --danger-text: #c81e1e;
+  --info-soft: #f1f0ec;
+
+  /* ---- Focus, overlays, shadows (shadows are for overlays only) ------------------------- */
+  --focus-ring: #6d5dfc;
+  --scrim: rgba(28, 26, 22, 0.34);
+  --shadow-overlay:
+    0 0 0 1px rgba(24, 24, 27, 0.06), 0 4px 10px -2px rgba(24, 24, 27, 0.08),
+    0 18px 40px -12px rgba(24, 24, 27, 0.22);
+  --shadow-toast:
+    0 0 0 1px rgba(24, 24, 27, 0.06), 0 6px 16px -4px rgba(24, 24, 27, 0.14);
+  --shadow-control: 0 1px 0 rgba(24, 24, 27, 0.04);
+  --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+
+  /* ---- Skeleton -------------------------------------------------------------------------- */
+  --skeleton-base: #efede8;
+  --skeleton-shine: #f7f6f3;
+
+  /* ---- Generated avatar colors (app icon fallbacks): muted, AA initials ------------------ */
+  --avatar-bg-0: #e9e6fb;
+  --avatar-fg-0: #4a3fa6;
+  --avatar-bg-1: #e2ecf8;
+  --avatar-fg-1: #2a5689;
+  --avatar-bg-2: #e0f0ea;
+  --avatar-fg-2: #22634c;
+  --avatar-bg-3: #f5eadb;
+  --avatar-fg-3: #85561c;
+  --avatar-bg-4: #f6e4e3;
+  --avatar-fg-4: #8c3533;
+  --avatar-bg-5: #efe5f4;
+  --avatar-fg-5: #6a3c86;
+  --avatar-bg-6: #e6eedf;
+  --avatar-fg-6: #47672c;
+  --avatar-bg-7: #ebe9e4;
+  --avatar-fg-7: #514e48;
+
+  /* Opacity of a workspace's own color when used as a tint behind its emoji. */
+  --tint-alpha: 0.16;
+  --tint-border-alpha: 0.22;
+
+  /* ---- Typography -------------------------------------------------------------------------- */
+  --font-sans:
+    "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    system-ui, "Ubuntu", "Cantarell", sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Noto Color Emoji";
+  --font-mono:
+    "Geist Mono Variable", ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo,
+    Consolas, "DejaVu Sans Mono", monospace;
+  --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --leading-xs: 16px;
+  --leading-sm: 18px;
+  --leading-base: 20px;
+  --leading-md: 24px;
+  --leading-lg: 28px;
+  --leading-xl: 34px;
+  --tracking-tight: -0.02em;
+  --tracking-snug: -0.01em;
+  --tracking-overline: 0.06em;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* ---- Space, shape, layout ------------------------------------------------------------------ */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-pill: 999px;
+
+  --control-sm: 28px;
+  --control-md: 32px;
+
+  --sidebar-width: 232px;
+  --content-max: 1180px;
+  --page-pad-x: 40px;
+  --sheet-inset: 8px;
+
+  /* ---- Motion ----------------------------------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.25, 1);
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 200ms;
+
+  /* ---- Layers ------------------------------------------------------------------------------------- */
+  --z-sticky: 10;
+  --z-dialog: 200;
+  /* Menus and popovers can open from inside a dialog, so they stack above it. */
+  --z-popover: 250;
+  --z-toast: 300;
+  --z-tooltip: 400;
+}
+
+/* ---- Dark palette: explicit choice ------------------------------------------------------------ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #0f0f12;
+  --bg-surface: #17171c;
+  --bg-subtle: #1a1a20;
+  --bg-raised: #1e1e24;
+  --bg-sunken: #121216;
+  --bg-hover: rgba(237, 237, 240, 0.055);
+  --bg-active: rgba(237, 237, 240, 0.09);
+  --bg-inverse: #ededf0;
+  --border: #2a2a31;
+  --border-subtle: #222228;
+  --border-strong: #36363e;
+  --border-control: #33333b;
+  --bg-control: #1e1e24;
+  --bg-control-hover: #24242b;
+  --tooltip-bg: #2a2a31;
+  --tooltip-fg: #ededf0;
+  --tooltip-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #ededf0;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #85858e;
+  --text-inverse: #17171c;
+  --icon-muted: #71717a;
+  --text-disabled: #5c5c64;
+  --accent: #6d5dfc;
+  --accent-hover: #5b4bf0;
+  --accent-pressed: #5040e0;
+  --accent-soft: rgba(109, 93, 252, 0.16);
+  --accent-soft-hover: rgba(109, 93, 252, 0.22);
+  --accent-text: #a196ff;
+  --accent-border: rgba(140, 126, 255, 0.4);
+  --on-accent: #ffffff;
+  --accent-glow: rgba(109, 93, 252, 0.14);
+  --success: #22a95a;
+  --success-soft: rgba(22, 163, 74, 0.16);
+  --success-text: #4cc27a;
+  --warning: #e08a1e;
+  --warning-soft: rgba(217, 119, 6, 0.16);
+  --warning-text: #f0a43a;
+  --danger: #dc2626;
+  --danger-hover: #c81e1e;
+  --danger-soft: rgba(220, 38, 38, 0.16);
+  --danger-text: #f47c7c;
+  --info-soft: rgba(237, 237, 240, 0.06);
+  --focus-ring: #8577ff;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-overlay:
+    0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 44px -10px rgba(0, 0, 0, 0.65);
+  --shadow-toast:
+    0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px -6px rgba(0, 0, 0, 0.6);
+  --shadow-control: 0 1px 0 rgba(0, 0, 0, 0.2);
+  --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --skeleton-base: #1f1f25;
+  --skeleton-shine: #26262d;
+  --avatar-bg-0: #28254a;
+  --avatar-fg-0: #bcb4ff;
+  --avatar-bg-1: #1d2a3d;
+  --avatar-fg-1: #9cc3f2;
+  --avatar-bg-2: #1a3029;
+  --avatar-fg-2: #8fd3b7;
+  --avatar-bg-3: #352a1b;
+  --avatar-fg-3: #e7c08a;
+  --avatar-bg-4: #3a2222;
+  --avatar-fg-4: #f0a9a6;
+  --avatar-bg-5: #2f2338;
+  --avatar-fg-5: #d6b2ea;
+  --avatar-bg-6: #243022;
+  --avatar-fg-6: #b4d699;
+  --avatar-bg-7: #26262c;
+  --avatar-fg-7: #c4c4cc;
+  --tint-alpha: 0.22;
+  --tint-border-alpha: 0.3;
+}
+
+/* ---- Dark palette: OS preference before an explicit theme is stamped ---------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg-app: #0f0f12;
+    --bg-surface: #17171c;
+    --bg-subtle: #1a1a20;
+    --bg-raised: #1e1e24;
+    --bg-sunken: #121216;
+    --bg-hover: rgba(237, 237, 240, 0.055);
+    --bg-active: rgba(237, 237, 240, 0.09);
+    --bg-inverse: #ededf0;
+    --border: #2a2a31;
+    --border-subtle: #222228;
+    --border-strong: #36363e;
+    --border-control: #33333b;
+    --bg-control: #1e1e24;
+    --bg-control-hover: #24242b;
+    --tooltip-bg: #2a2a31;
+    --tooltip-fg: #ededf0;
+    --tooltip-border: rgba(255, 255, 255, 0.08);
+    --text-primary: #ededf0;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #85858e;
+    --text-inverse: #17171c;
+    --icon-muted: #71717a;
+    --text-disabled: #5c5c64;
+    --accent-soft: rgba(109, 93, 252, 0.16);
+    --accent-soft-hover: rgba(109, 93, 252, 0.22);
+    --accent-text: #a196ff;
+    --accent-border: rgba(140, 126, 255, 0.4);
+    --accent-glow: rgba(109, 93, 252, 0.14);
+    --success: #22a95a;
+    --success-soft: rgba(22, 163, 74, 0.16);
+    --success-text: #4cc27a;
+    --warning: #e08a1e;
+    --warning-soft: rgba(217, 119, 6, 0.16);
+    --warning-text: #f0a43a;
+    --danger-soft: rgba(220, 38, 38, 0.16);
+    --danger-text: #f47c7c;
+    --info-soft: rgba(237, 237, 240, 0.06);
+    --focus-ring: #8577ff;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow-overlay:
+      0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 18px 44px -10px rgba(0, 0, 0, 0.65);
+    --shadow-toast:
+      0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 10px 24px -6px rgba(0, 0, 0, 0.6);
+    --shadow-control: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --skeleton-base: #1f1f25;
+    --skeleton-shine: #26262d;
+    --avatar-bg-0: #28254a;
+    --avatar-fg-0: #bcb4ff;
+    --avatar-bg-1: #1d2a3d;
+    --avatar-fg-1: #9cc3f2;
+    --avatar-bg-2: #1a3029;
+    --avatar-fg-2: #8fd3b7;
+    --avatar-bg-3: #352a1b;
+    --avatar-fg-3: #e7c08a;
+    --avatar-bg-4: #3a2222;
+    --avatar-fg-4: #f0a9a6;
+    --avatar-bg-5: #2f2338;
+    --avatar-fg-5: #d6b2ea;
+    --avatar-bg-6: #243022;
+    --avatar-fg-6: #b4d699;
+    --avatar-bg-7: #26262c;
+    --avatar-fg-7: #c4c4cc;
+    --tint-alpha: 0.22;
+    --tint-border-alpha: 0.3;
+  }
+}
+
+/* Narrower windows get slightly tighter page padding. */
+@media (max-width: 1199px) {
+  :root {
+    --page-pad-x: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}
