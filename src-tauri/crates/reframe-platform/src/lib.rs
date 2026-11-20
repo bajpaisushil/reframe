@@ -24,6 +24,9 @@ mod types;
 pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
+#[cfg(any(target_os = "macos", test))] // pure macOS logic, unit-tested on every OS
+#[path = "macos/logic.rs"]
+mod macos_logic;
 #[cfg(target_os = "windows")]
 pub mod win32;
 
