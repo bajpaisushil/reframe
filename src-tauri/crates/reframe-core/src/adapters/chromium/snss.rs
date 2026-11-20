@@ -1300,6 +1300,65 @@ mod tests {
         }
     }
 
+    /// Structured fuzzing: well-framed records with known command ids, small interacting ids
+    /// and indices, and random or near-valid payloads drive every replay path. Whatever a
+    /// file parses to must keep the [`SessionWindow`] invariants.
+    #[test]
+    fn random_record_streams_never_panic() {
+        let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut with_windows = 0usize;
+        for _ in 0..2000 {
+            let version = if next() % 2 == 0 { 1 } else { 3 };
+            let mut writer = SnssWriter::new(version);
+            for _ in 0..next() % 120 {
+                // Ids and indices in -1..=4 so that records refer to each other.
+                let mut small = || i32::try_from(next() % 6).unwrap() - 1;
+                let (a, b, c) = (small(), small(), small());
+                writer = match next() % 20 {
+                    0 => writer.tab_window(a, b),
+                    1 => writer.tab_index(a, b),
+                    2 => writer.ints(5, &[a, b]),
+                    3 | 4 => writer.navigation(a, b, "https://a.example/", "title"),
+                    5 => writer.selected_navigation(a, b),
+                    6 => writer.selected_tab(a, b),
+                    7 | 8 => writer.window_type(a, b.max(0) % 2),
+                    9 => writer.record(10, &[1; 24]),
+                    10 => writer.ints(11, &[a, b]),
+                    11 => writer.pinned(a, b > 0),
+                    12 => writer.bounds(a, b, c, 800, 600, b),
+                    13 => writer.tab_closed(a),
+                    14 => writer.window_closed(a),
+                    15 => writer.active_window(a),
+                    16 => writer.ints(24, &[a, b, c]),
+                    17 => writer.user_title(a, "name"),
+                    18 => writer.marker(),
+                    // Unknown commands and corrupt payloads of known ones.
+                    _ => {
+                        let id = [0u8, 6, 9, 13, 14, 31, 99][(next() as usize) % 7];
+                        let payload: Vec<u8> = (0..next() % 40).map(|_| next() as u8).collect();
+                        writer.record(id, &payload)
+                    }
+                };
+            }
+            let Ok(session) = parse_session(&writer.build()) else {
+                continue;
+            };
+            with_windows += usize::from(!session.windows.is_empty());
+            for window in &session.windows {
+                assert!(!window.tabs.is_empty());
+                assert!(window.selected_tab < window.tabs.len());
+            }
+        }
+        // The streams really reach the window and tab reconstruction.
+        assert!(with_windows > 50, "{with_windows}");
+    }
+
     #[test]
     fn clean_text_strips_controls_and_bounds_length() {
         assert_eq!(clean_text("  a\tb\nc  "), "a b c");

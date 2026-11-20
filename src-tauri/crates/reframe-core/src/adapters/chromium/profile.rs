@@ -11,6 +11,7 @@
 //! Everything read here is untrusted: profile names are validated as a single plain path
 //! component before they are joined to a path, and file reads are size-bounded.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -42,7 +43,7 @@ pub struct Switches {
 /// case-insensitive on Windows only. The last occurrence of a switch wins.
 pub fn parse_switches(command_line: &[String], os: OsKind) -> Switches {
     let mut switches = Switches::default();
-    for arg in command_line.iter().skip(1) {
+    for arg in split_command_line(command_line).iter().skip(1) {
         let arg = arg.trim();
         if arg == "--" {
             break;
@@ -66,6 +67,29 @@ pub fn parse_switches(command_line: &[String], os: OsKind) -> Switches {
         }
     }
     switches
+}
+
+/// The arguments of a process command line.
+///
+/// Chromium rewrites its process title on Linux (`setproctitle`), after which
+/// `/proc/<pid>/cmdline` holds the program and every argument in one space-separated string.
+/// Such a one-element command line is split again before each ` -`, which keeps switch values
+/// containing spaces (`--profile-directory=Profile 1`) whole; non-switch arguments stay
+/// attached to the switch before them. Any other command line is returned unchanged.
+pub fn split_command_line(command_line: &[String]) -> Cow<'_, [String]> {
+    match command_line {
+        [single] if single.contains(" -") => {
+            let mut parts = Vec::new();
+            let mut rest = single.as_str();
+            while let Some(i) = rest.find(" -") {
+                parts.push(rest[..i].to_string());
+                rest = &rest[i + 1..];
+            }
+            parts.push(rest.to_string());
+            Cow::Owned(parts)
+        }
+        _ => Cow::Borrowed(command_line),
+    }
 }
 
 fn unquote(value: &str) -> String {
@@ -311,6 +335,30 @@ mod tests {
             OsKind::Linux,
         );
         assert_eq!(s, Switches::default());
+    }
+
+    #[test]
+    fn parses_command_lines_rewritten_by_setproctitle() {
+        // Chromium rewrites its process title on Linux: `/proc/<pid>/cmdline` then holds the
+        // whole command line as one space-separated string.
+        let s = parse_switches(
+            &args(&["/opt/google/chrome/chrome --profile-directory=Profile 1 \
+                 --user-data-dir=/home/me/my profiles/chrome --enable-features=X"]),
+            OsKind::Linux,
+        );
+        assert_eq!(s.profile_directory.as_deref(), Some("Profile 1"));
+        assert_eq!(
+            s.user_data_dir.as_deref(),
+            Some("/home/me/my profiles/chrome")
+        );
+        // A plain program path (spaces, no switches) stays one argument.
+        let plain = args(&["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]);
+        assert_eq!(split_command_line(&plain).as_ref(), plain.as_slice());
+        assert_eq!(parse_switches(&plain, OsKind::Macos), Switches::default());
+        assert_eq!(
+            split_command_line(&args(&["/opt/chrome --type=renderer -- --x=1"])).as_ref(),
+            ["/opt/chrome", "--type=renderer", "--", "--x=1"]
+        );
     }
 
     #[cfg(unix)] // POSIX absolute paths

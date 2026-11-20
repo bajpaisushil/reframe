@@ -228,7 +228,7 @@ fn lookup(table: &[(&str, Browser, Channel)], key: &str) -> Option<(Browser, Cha
 /// Chromium child processes carry a `--type=` switch (renderer, GPU, utility, zygote,
 /// crashpad handler...). Only the browser process is "the application".
 pub fn is_child_process(command_line: &[String]) -> bool {
-    command_line
+    super::profile::split_command_line(command_line)
         .iter()
         .skip(1)
         .map(|arg| arg.trim())
@@ -925,6 +925,13 @@ mod tests {
             &["/opt/google/chrome/chrome", "--type=renderer", "--lang=en"],
         );
         assert_eq!(identify_process(&renderer), None);
+        // On Linux the title is rewritten into one string (setproctitle).
+        let squashed = process(
+            Some("/opt/google/chrome/chrome"),
+            "chrome",
+            &["/opt/google/chrome/chrome --type=renderer --lang=en"],
+        );
+        assert_eq!(identify_process(&squashed), None);
         // `--type=` after `--` is a URL argument, not a switch.
         let main = process(
             Some("/opt/google/chrome/chrome"),

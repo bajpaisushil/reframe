@@ -17,7 +17,7 @@
 //!   no profile folder, no or unreadable session file — the capture still succeeds with the
 //!   windows (no tabs) and a warning.
 //! - **Restore**: one `--new-window <urls...>` launch per saved window (plus
-//!   `--profile-directory=` for non-default profiles that exist on this machine), split into
+//!   `--profile-directory=` for the saved profile when it exists on this machine), split into
 //!   more windows when a window has too many tabs for one command line ([`launch`]). URLs
 //!   follow a `--` separator so no saved address can ever be read as a browser switch. With
 //!   nothing restorable, the browser is simply started (it may restore its own session).
@@ -32,6 +32,9 @@
 //!   recorded by the browser, so they are never captured.
 //! - Browsers save their session a few seconds after a change; a tab opened just before the
 //!   capture may be missing.
+//! - A current session file that cannot be opened is reported, never replaced by an older file
+//!   or another profile's session (those describe tabs that may no longer be open). On Windows
+//!   a running browser may keep its current session file locked; its tabs then cannot be read.
 //! - Browsers that write only encrypted session files (`Sessions_Encrypted/`, enabled in newer
 //!   Chromium versions) cannot be read; the user gets a warning explaining it.
 //! - If the browser is not running and is set to "Continue where you left off", it may also
@@ -185,6 +188,7 @@ impl ChromiumAdapter {
         let mut best: Option<(String, Session, matching::Matching)> = None;
         let mut encrypted = false;
         let mut problems = Vec::new();
+        let mut inaccessible: Option<String> = None;
         for profile_name in profiles {
             match load_session(&user_data.join(&profile_name)) {
                 SessionLoad::Loaded(session) => {
@@ -199,9 +203,23 @@ impl ChromiumAdapter {
                     }
                 }
                 SessionLoad::Encrypted => encrypted = true,
+                SessionLoad::Inaccessible(problem) => {
+                    inaccessible.get_or_insert(problem);
+                }
                 SessionLoad::Unreadable(problem) => problems.push(problem),
                 SessionLoad::Missing => {}
             }
+        }
+
+        // A profile whose session cannot be opened is most likely the one in use (its file
+        // held open by the browser); the readable sessions of other profiles are then the last
+        // sessions of profiles that are not open, which could still match by window geometry.
+        if let Some(problem) = inaccessible {
+            return without_tabs(format!(
+                "{name}: the browser's current session file could not be opened ({problem}), \
+                 so its tabs were not captured. A running browser may keep this file locked. \
+                 Only the windows were saved."
+            ));
         }
 
         let Some((profile_name, session, matched)) = best else {
@@ -294,8 +312,10 @@ impl ChromiumAdapter {
         custom.into_iter().chain(defaults).collect()
     }
 
-    /// `--profile-directory=<profile>` for a non-default profile that exists here. A missing
-    /// profile is not passed: the browser would silently create a new, empty one.
+    /// `--profile-directory=<profile>` for the saved profile when it exists here, `Default`
+    /// included: without it the browser opens the addresses in its last-used profile, which
+    /// may be another one. A missing profile is not passed: the browser would silently create
+    /// a new, empty one.
     fn profile_switch(
         &self,
         ctx: &LaunchContext<'_>,
@@ -303,7 +323,7 @@ impl ChromiumAdapter {
         profile: Option<&str>,
     ) -> Option<String> {
         let profile = profile?;
-        if profile == DEFAULT_PROFILE || !profile::valid_profile_name(profile) {
+        if !profile::valid_profile_name(profile) {
             return None;
         }
         let user_data = self
@@ -571,15 +591,19 @@ fn session_warnings(name: &str, session: &Session, warnings: &mut Vec<String>) {
 enum SessionLoad {
     Loaded(Session),
     Encrypted,
+    /// The newest session file exists but cannot be opened. On Windows a running browser keeps
+    /// the file it writes locked; older files hold earlier sessions and are not used instead.
+    Inaccessible(String),
     Unreadable(String),
     Missing,
 }
 
-/// The newest readable plain session of a profile.
+/// The current session of a profile: its newest plain session file. An older file is used
+/// only while the newer one is still being written (it holds an earlier session, so in any
+/// other case it would describe tabs that are no longer open).
 fn load_session(profile_dir: &Path) -> SessionLoad {
     let newest_encrypted = profile::newest_encrypted_session(profile_dir);
     let mut problem: Option<String> = None;
-    let mut saw_encrypted = false;
     let max_bytes = u64::try_from(snss::Limits::default().max_file_bytes).unwrap_or(u64::MAX);
     for file in profile::session_files(profile_dir)
         .into_iter()
@@ -589,8 +613,16 @@ fn load_session(profile_dir: &Path) -> SessionLoad {
             Ok(data) => data,
             Err(error) => {
                 log::debug!("chromium: cannot read {}: {error}", file.path.display());
-                problem.get_or_insert_with(|| error.to_string());
-                continue;
+                return match error.kind() {
+                    // Replaced by a newer file since the folder was listed (a retry reads
+                    // it), too large, or not a regular file.
+                    std::io::ErrorKind::NotFound
+                    | std::io::ErrorKind::InvalidData
+                    | std::io::ErrorKind::InvalidInput => {
+                        SessionLoad::Unreadable(error.to_string())
+                    }
+                    _ => SessionLoad::Inaccessible(error.to_string()),
+                };
             }
         };
         match snss::parse_session(&data) {
@@ -615,10 +647,15 @@ fn load_session(profile_dir: &Path) -> SessionLoad {
                 );
                 return SessionLoad::Loaded(session);
             }
-            Err(SnssError::Encrypted { .. }) => saw_encrypted = true,
+            Err(SnssError::Encrypted { .. }) => return SessionLoad::Encrypted,
+            // Created or rewritten right now: the previous file is the latest complete state.
+            Err(error @ (SnssError::Incomplete | SnssError::TooShort)) => {
+                log::debug!("chromium: {} is incomplete", file.path.display());
+                problem.get_or_insert_with(|| error.to_string());
+            }
             Err(error) => {
                 log::debug!("chromium: cannot parse {}: {error}", file.path.display());
-                problem.get_or_insert_with(|| error.to_string());
+                return SessionLoad::Unreadable(error.to_string());
             }
         }
     }
@@ -626,7 +663,7 @@ fn load_session(profile_dir: &Path) -> SessionLoad {
     // (browsers write both while migrating): report the failure, which a retry can fix.
     if let Some(problem) = problem {
         SessionLoad::Unreadable(problem)
-    } else if saw_encrypted || newest_encrypted.is_some() {
+    } else if newest_encrypted.is_some() {
         SessionLoad::Encrypted
     } else {
         SessionLoad::Missing
@@ -1110,6 +1147,14 @@ mod tests {
             "{:?}",
             out.warnings
         );
+
+        // The same command line as Linux shows it for Chromium (rewritten process title).
+        let mut squashed = chrome_process(&[]);
+        squashed.command_line = vec!["/opt/google/chrome/chrome --profile-directory=Work".into()];
+        let out = fx.capture(&squashed, &[&mail], true);
+        let (windows, profile) = browser_state(&out);
+        assert_eq!(profile, Some("Work"), "{:?}", out.warnings);
+        assert!(!windows[0].tabs.is_empty());
     }
 
     #[test]
@@ -1202,6 +1247,78 @@ mod tests {
         let out = fx.capture(&chrome_process(&[]), &[&mail], true);
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
         assert_eq!(browser_state(&out).0[0].tabs.len(), 2);
+    }
+
+    /// Older session files hold earlier sessions: they may only stand in for a newest file
+    /// that is still being written.
+    #[test]
+    fn older_sessions_do_not_replace_an_unusable_newest_one() {
+        let fx = Fixture::new();
+        let default = fx.profile("Default");
+        write_session_file(&default, 13_340_000_000_000_000, &two_window_session());
+        let mail = window(
+            "w2",
+            "Inbox - Example Mail - Google Chrome",
+            Rect::new(0, 0, 960, 1040),
+        );
+        // The newest file is encrypted: the older plain one predates the encryption.
+        write_session_file(
+            &default,
+            13_350_000_000_000_000,
+            &SnssWriter::new(4).build(),
+        );
+        let out = fx.capture(&chrome_process(&[]), &[&mail], true);
+        assert!(out.warnings[0].contains("encrypts"), "{:?}", out.warnings);
+        assert!(browser_state(&out).0[0].tabs.is_empty());
+        // The newest file is not a session file at all.
+        write_session_file(&default, 13_350_000_000_000_000, b"garbage-garbage-");
+        let out = fx.capture(&chrome_process(&[]), &[&mail], true);
+        assert!(
+            out.warnings[0].contains("not a Chromium session file"),
+            "{:?}",
+            out.warnings
+        );
+        assert!(browser_state(&out).0[0].tabs.is_empty());
+    }
+
+    /// On Windows a running browser keeps the session file it writes locked. Neither an older
+    /// file (an earlier session) nor the last session of a profile that is not open may stand
+    /// in for it.
+    #[cfg(unix)]
+    #[test]
+    fn inaccessible_current_session_is_reported_not_replaced() {
+        use std::os::unix::fs::PermissionsExt;
+        let fx = Fixture::new();
+        fx.local_state(
+            r#"{"profile":{"last_used":"Default","info_cache":{"Default":{},"Profile 1":{}}}}"#,
+        );
+        let default = fx.profile("Default");
+        write_session_file(&default, 13_340_000_000_000_000, &two_window_session());
+        write_session_file(&default, 13_350_000_000_000_000, &two_window_session());
+        let current = default.join("Sessions").join("Session_13350000000000000");
+        std::fs::set_permissions(&current, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::File::open(&current).is_ok() {
+            return; // Running as root: permissions cannot make the file unreadable.
+        }
+        write_session_file(
+            &fx.profile("Profile 1"),
+            13_330_000_000_000_000,
+            &two_window_session(),
+        );
+        let mail = window(
+            "w2",
+            "Inbox - Example Mail - Google Chrome",
+            Rect::new(0, 0, 960, 1040),
+        );
+        let out = fx.capture(&chrome_process(&[]), &[&mail], true);
+        let (windows, _) = browser_state(&out);
+        assert!(windows[0].tabs.is_empty(), "{windows:?}");
+        assert_eq!(out.warnings.len(), 1, "{:?}", out.warnings);
+        assert!(
+            out.warnings[0].contains("could not be opened"),
+            "{:?}",
+            out.warnings
+        );
     }
 
     #[test]
@@ -1434,11 +1551,11 @@ mod tests {
     }
 
     #[test]
-    fn profile_switch_only_for_existing_non_default_profiles() {
+    fn profile_switch_only_for_existing_profiles() {
         let fx = Fixture::new();
         fx.profile("Default");
         let window = vec![tabs(&["https://a.example/"])];
-        for profile in [Some("Default"), Some("Profile 9"), Some("../escape"), None] {
+        for profile in [Some("Profile 9"), Some("../escape"), None] {
             let steps = fx.plan(&browser_entry(window.clone(), profile)).unwrap();
             assert_eq!(
                 steps[0].request.args,
@@ -1446,6 +1563,20 @@ mod tests {
                 "{profile:?}"
             );
         }
+        // Without the switch the browser would use its last-used profile, which can be
+        // another one: `Default` is named explicitly too.
+        let steps = fx
+            .plan(&browser_entry(window.clone(), Some("Default")))
+            .unwrap();
+        assert_eq!(
+            steps[0].request.args,
+            [
+                "--new-window",
+                "--profile-directory=Default",
+                "--",
+                "https://a.example/"
+            ]
+        );
     }
 
     #[test]
