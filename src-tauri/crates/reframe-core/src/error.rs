@@ -31,11 +31,6 @@ pub enum CoreError {
 
     #[error("File error: {0}")]
     Io(#[from] std::io::Error),
-
-    /// Temporary marker for functionality still under construction. Must not remain in
-    /// release builds.
-    #[error("{0} is not implemented yet.")]
-    NotImplemented(&'static str),
 }
 
 impl CoreError {
@@ -56,7 +51,6 @@ impl CoreError {
             Self::Database(_) => "database",
             Self::Serialization(_) => "serialization",
             Self::Io(_) => "io",
-            Self::NotImplemented(_) => "notImplemented",
         }
     }
 

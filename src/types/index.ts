@@ -14,7 +14,6 @@ export interface ApiError {
     | "database"
     | "serialization"
     | "io"
-    | "notImplemented"
     | "internal";
   message: string;
   details: string[];

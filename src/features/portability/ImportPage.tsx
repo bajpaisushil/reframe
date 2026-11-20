@@ -133,11 +133,6 @@ function failureCopy(error: ApiError): { title: string; text: string } {
   switch (error.kind) {
     case "invalidImport":
       return { title: "This file can't be imported", text: error.message };
-    case "notImplemented":
-      return {
-        title: "Importing isn't available in this version yet",
-        text: "This build of Reframe can't read workspace files yet. Nothing was changed.",
-      };
     case "io":
       return { title: "Couldn't open the file", text: error.message };
     case "notFound":
