@@ -1,0 +1,135 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 148px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.card:not(.skeleton):hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  flex: 1;
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: inherit;
+  text-align: left;
+}
+
+.open:focus-visible {
+  outline-offset: -1px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  /* Room for the actions menu in the corner. */
+  padding-right: var(--space-8);
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+}
+
+.active {
+  flex: none;
+}
+
+.when {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.busy .when {
+  color: var(--accent-text);
+}
+
+.description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+  margin-top: auto;
+  /* Room for the Restore button. */
+  padding-right: 96px;
+}
+
+.count {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.noApps {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.menu {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.restore {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+}
+
+.skeleton {
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.skeleton .footer {
+  padding-right: 0;
+}

@@ -1,0 +1,476 @@
+/* Shared styles of the application editor (the expanded row). */
+
+.editor {
+  padding: var(--space-2) var(--space-5) var(--space-4) calc(var(--space-5) + 2px);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Forms read best at a comfortable measure, even in a wide window. */
+.tabContent {
+  max-width: 760px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.groupTitle {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.groupMeta {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.hint {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.empty {
+  padding: var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  text-align: center;
+}
+
+/* ---- Item lists (projects, tabs, folders, windows…) --------------------------------------- */
+
+.list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-3);
+}
+
+.listRow + .listRow {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.listIcon {
+  flex: none;
+  color: var(--icon-muted);
+}
+
+.listText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.listTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.listMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.listRow .removeButton {
+  opacity: 0.65;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.listRow:hover .removeButton,
+.listRow .removeButton:focus-visible {
+  opacity: 1;
+}
+
+.windowGroup + .windowGroup {
+  margin-top: var(--space-3);
+}
+
+.windowLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1-5);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-weight: var(--weight-medium);
+}
+
+.selectedDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.addRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.addRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fieldError {
+  margin-top: var(--space-1);
+  color: var(--danger-text);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.inlineBadge {
+  flex: none;
+}
+
+/* Mono fields keep a friendly sans placeholder. */
+.sansPlaceholder::placeholder {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.windowSelect {
+  width: 128px;
+  flex: none;
+}
+
+.pageField {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex: none;
+}
+
+.pageLabel {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.pageInput {
+  width: 56px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.code {
+  max-height: 240px;
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Settings rows: label + explanation on the left, control on the right ------------------ */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2) var(--space-6);
+  padding: var(--space-3) var(--space-4);
+}
+
+.setting + .setting {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.settingText {
+  min-width: 0;
+}
+
+.settingLabel {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-medium);
+}
+
+.settingHint {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.settingControl {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* ---- Program / folder value boxes ------------------------------------------------------------ */
+
+.valueRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.valueBox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  height: var(--control-md);
+  padding: 0 var(--space-2-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.valueText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valueEmpty {
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.argList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  max-width: 520px;
+}
+
+.argRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.switchRow {
+  grid-column: 1 / -1;
+}
+
+.dependencyLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Callouts ------------------------------------------------------------------------------- */
+
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2-5) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.callout > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.calloutWarning {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.calloutInfo {
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+
+.calloutText {
+  color: var(--text-primary);
+}
+
+.calloutWarning .calloutText {
+  color: inherit;
+}
+
+/* ---- Terminal sessions ------------------------------------------------------------------------ */
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.sessionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: -4px -6px -4px 0;
+}
+
+.sessionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.sessionMeta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+}
+
+.twoColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ---- Dependencies ---------------------------------------------------------------------------- */
+
+.dependencyList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.dependency {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-5);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-xs);
+}
+
+.dependency:hover:not(.dependencyDisabled) {
+  background: var(--bg-hover);
+}
+
+.dependencyDisabled {
+  cursor: default;
+}
+
+.dependencyName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 20px;
+}
+
+/* ---- Footer ----------------------------------------------------------------------------------- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.footnote {
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.remove {
+  margin-right: calc(-1 * var(--space-2));
+}
+
+@media (max-width: 1100px) {
+  .twoColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,5 @@
+/* The destructive choice sits apart, on the left. */
+.discard {
+  margin-right: auto;
+  margin-left: calc(-1 * var(--space-2));
+}
