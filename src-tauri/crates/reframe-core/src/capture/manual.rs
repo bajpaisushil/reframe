@@ -325,7 +325,9 @@ fn resolve_package(mut package: PackageInfo, os: OsKind) -> CoreResult<Resolved>
                     || c.is_control()
                     || (package.kind != PackageKind::WindowsPackage && c == '/')
             };
-            if package.id.chars().any(invalid_char) {
+            // Ids are handed to launchers (`flatpak run <id>`, `snap run <id>`): one that starts
+            // with `-` would be read as an option. No real application id starts with one.
+            if package.id.starts_with('-') || package.id.chars().any(invalid_char) {
                 return Err(invalid(format!(
                     "{} is not a valid application id.",
                     package.id

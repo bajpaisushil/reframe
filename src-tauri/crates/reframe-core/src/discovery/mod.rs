@@ -38,8 +38,9 @@ use guard::AdapterIssues;
 pub struct DiscoveryOptions {
     /// App ids / executable names the user never wants suggested (case-insensitive).
     pub exclusions: Vec<String>,
-    /// Reframe's own pid: its windows (and those of processes it started) are never listed.
-    /// `0` means unknown.
+    /// Reframe's own pid: windows owned by this process are never listed. Its child processes
+    /// (applications Reframe launched while restoring) are listed like any other. `0` means
+    /// unknown.
     pub self_pid: u32,
     /// Allow adapters to read browser session files.
     pub browser_tab_capture: bool,
@@ -75,7 +76,8 @@ pub fn gather(platform: &dyn Platform) -> DesktopState {
 /// owning processes share a package/executable), identify adapters, classify
 /// system/utility/application windows, apply exclusions and attach adapter previews.
 ///
-/// - Reframe's own windows (`options.self_pid` and its descendants) are left out.
+/// - Reframe's own windows (owned by `options.self_pid`) are left out. Its descendants are not:
+///   applications it launched during a restore stay its children and are listed.
 /// - Applications are ordered by their frontmost window; windows inside an application are
 ///   front-to-back. The main process is the owner of the frontmost window.
 /// - `suggested` = category [`AppCategory::Application`] and not excluded.

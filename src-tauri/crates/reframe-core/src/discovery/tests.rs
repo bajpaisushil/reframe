@@ -185,20 +185,12 @@ fn windows_without_a_known_process_group_by_class() {
 }
 
 #[test]
-fn reframe_and_processes_it_started_are_not_listed() {
+fn reframe_itself_is_not_listed() {
     let p = MockPlatform::new();
     let me = p.add_process("reframe", Some("/usr/bin/reframe".into()));
-    let helper = p.add_process_info(ProcessInfo {
-        parent_pid: Some(me),
-        ..process(
-            0,
-            "WebKitWebProcess",
-            Some("/usr/lib/webkit/WebKitWebProcess"),
-        )
-    });
     let gimp = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     window(&p, me, "Reframe");
-    window(&p, helper, "Inspector");
+    window(&p, me, "Reframe settings");
     window(&p, gimp, "GIMP");
 
     let opts = DiscoveryOptions {
@@ -211,7 +203,57 @@ fn reframe_and_processes_it_started_are_not_listed() {
     // An unknown own pid (0) hides nothing, not even windows without an owner.
     p.add_window(0, "Clock", Some("XClock"), rect(300, 300));
     let snap = scan(&p, &generic_only(), &options());
-    assert_eq!(snap.applications.len(), 4);
+    assert_eq!(snap.applications.len(), 3);
+    let snap = scan(&p, &generic_only(), &opts);
+    assert_eq!(keys(&snap), vec!["class:XClock", "exe:/usr/bin/gimp"]);
+}
+
+#[test]
+fn applications_restored_by_reframe_are_listed() {
+    // Regression: restores start applications detached (`spawn_detached` only changes the
+    // process group), so they keep Reframe as their parent process while it runs. Only windows
+    // owned by Reframe's own pid are hidden, never those of its descendants.
+    let p = MockPlatform::new();
+    set_os(&p, OsKind::Windows);
+    let child = |parent: u32, name: &str, exe: &str| {
+        p.add_process_info(ProcessInfo {
+            parent_pid: Some(parent),
+            ..process(0, name, Some(exe))
+        })
+    };
+    let me = p.add_process(
+        "reframe.exe",
+        Some(r"C:\Program Files\Reframe\reframe.exe".into()),
+    );
+    let notepad = child(me, "Notepad.exe", r"C:\Windows\System32\notepad.exe");
+    let terminal = child(
+        me,
+        "WindowsTerminal.exe",
+        r"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal\WindowsTerminal.exe",
+    );
+    let shell = child(
+        terminal,
+        "pwsh.exe",
+        r"C:\Program Files\PowerShell\7\pwsh.exe",
+    );
+    window(&p, me, "Reframe");
+    window(&p, notepad, "notes.txt - Notepad");
+    window(&p, terminal, "Terminal");
+    window(&p, shell, "Windows PowerShell");
+
+    let opts = DiscoveryOptions {
+        self_pid: me,
+        ..options()
+    };
+    let snap = scan(&p, &generic_only(), &opts);
+    let mut listed: Vec<u32> = snap
+        .applications
+        .iter()
+        .flat_map(|a| a.pids.clone())
+        .collect();
+    listed.sort_unstable();
+    assert_eq!(listed, vec![notepad, terminal, shell], "{:?}", keys(&snap));
+    assert!(snap.applications.iter().all(|a| a.suggested));
 }
 
 #[test]

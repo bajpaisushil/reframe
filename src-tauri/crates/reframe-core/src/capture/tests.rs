@@ -455,6 +455,34 @@ fn reframe_itself_is_never_captured() {
 }
 
 #[test]
+fn applications_restored_by_reframe_can_be_captured() {
+    let p = linux();
+    let me = p.add_process("reframe", Some("/usr/bin/reframe".into()));
+    window(&p, me, "Reframe");
+    // Started by a restore: detached, but still a child of Reframe.
+    let gedit = p.add_process_info(ProcessInfo {
+        parent_pid: Some(me),
+        ..process(0, "gedit", Some("/usr/bin/gedit"))
+    });
+    window(&p, gedit, "notes.txt");
+    let opts = DiscoveryOptions {
+        self_pid: me,
+        ..options()
+    };
+    let result = capture_with(
+        &p,
+        &generic_only(),
+        &[
+            select("exe:/usr/bin/gedit", &[]),
+            select("exe:/usr/bin/reframe", &[]),
+        ],
+        &opts,
+    );
+    let apps: Vec<&str> = result.entries.iter().map(|e| e.app_id.as_str()).collect();
+    assert_eq!(apps, vec!["exe:gedit"]);
+}
+
+#[test]
 fn platform_warnings_of_the_fresh_scan_are_included() {
     let p = MockPlatform::new();
     let pid = p.add_process("gimp", Some("/usr/bin/gimp".into()));
@@ -726,6 +754,15 @@ fn package_targets_are_validated_for_this_system() {
 
     let message = validation_message(manual(&p, package(PackageKind::Flatpak, "org.x y", None)));
     assert!(message.contains("not a valid application id"), "{message}");
+
+    // Ids are passed to `flatpak run` / `snap run`: they must not read as options.
+    for (kind, id) in [
+        (PackageKind::Flatpak, "--command=sh"),
+        (PackageKind::Snap, "-x"),
+    ] {
+        let message = validation_message(manual(&p, package(kind, id, None)));
+        assert!(message.contains("not a valid application id"), "{message}");
+    }
 
     let message = validation_message(manual(&p, package(PackageKind::AppImage, "", None)));
     assert!(message.contains(".AppImage"), "{message}");

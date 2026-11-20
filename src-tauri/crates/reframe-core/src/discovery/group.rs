@@ -21,9 +21,8 @@
 //! When the name is the interpreter's own (e.g. Windows `python.exe`) such applications still
 //! share one group — a documented limitation.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use reframe_platform::common::process::descendants;
 use reframe_platform::{OsKind, ProcessInfo, WindowInfo};
 
 use super::DiscoveryOptions;
@@ -136,21 +135,21 @@ impl<'a> AppGroup<'a> {
     }
 }
 
-/// Pids whose windows are never listed: Reframe itself and every process it started (helper
-/// processes such as the web view). `self_pid == 0` means "unknown" and hides nothing; pid 0
-/// (windows without a known owner) is never treated as Reframe's.
-pub(crate) fn own_pids(processes: &[ProcessInfo], self_pid: u32) -> HashSet<u32> {
-    if self_pid == 0 {
-        return HashSet::new();
-    }
-    std::iter::once(self_pid)
-        .chain(descendants(processes, self_pid))
-        .filter(|&pid| pid != 0)
-        .collect()
+/// True for Reframe's own windows: those owned by `self_pid`. `self_pid == 0` means "unknown"
+/// and matches nothing (in particular not the windows without a known owner, pid 0).
+///
+/// Only Reframe's own process is hidden, never its descendants: applications Reframe launches
+/// while restoring a workspace are started detached (`spawn_detached` only changes the process
+/// group), so they stay children of Reframe for as long as it runs and must remain listed and
+/// capturable. Reframe's web view helper processes (WebKitGTK, WebView2) own no top-level
+/// windows, so they need no special case.
+pub(crate) fn is_own_window(window: &WindowInfo, self_pid: u32) -> bool {
+    self_pid != 0 && window.pid == self_pid
 }
 
 /// Group the visible windows of `state` into applications, ordered by their frontmost window,
-/// with windows front-to-back inside each application. Reframe's own windows are left out.
+/// with windows front-to-back inside each application. Reframe's own windows are left out
+/// (see [`is_own_window`]).
 pub(crate) fn group_windows<'a>(
     state: &'a DesktopState,
     options: &DiscoveryOptions,
@@ -160,13 +159,11 @@ pub(crate) fn group_windows<'a>(
     for process in &state.processes {
         by_pid.entry(process.pid).or_insert(process);
     }
-    let hidden = own_pids(&state.processes, options.self_pid);
-
     let mut ordered: Vec<(usize, &WindowInfo)> = state
         .windows
         .iter()
         .enumerate()
-        .filter(|(_, w)| !hidden.contains(&w.pid))
+        .filter(|(_, w)| !is_own_window(w, options.self_pid))
         .collect();
     // z_order first; the platform's front-to-back order breaks ties.
     ordered.sort_by_key(|(index, w)| (w.z_order, *index));
@@ -479,16 +476,42 @@ mod tests {
     }
 
     #[test]
-    fn own_pids_include_descendants_and_ignore_zero() {
-        let mut child = process(11, "WebKitWebProcess", None);
+    fn only_reframes_own_windows_are_hidden() {
+        assert!(is_own_window(&window("me", 10, 0), 10));
+        // Children of Reframe (applications it restored) are not Reframe.
+        assert!(!is_own_window(&window("child", 11, 0), 10));
+        // An unknown own pid hides nothing, and pid 0 is never Reframe's.
+        assert!(!is_own_window(&window("me", 10, 0), 0));
+        assert!(!is_own_window(&window("orphan", 0, 0), 0));
+        assert!(!is_own_window(&window("orphan", 0, 0), 10));
+    }
+
+    #[test]
+    fn windows_of_reframes_children_are_grouped() {
+        let mut child = process(11, "xterm", Some("/usr/bin/xterm"));
         child.parent_pid = Some(10);
-        let mut grandchild = process(12, "helper", None);
+        let mut grandchild = process(12, "gedit", Some("/usr/bin/gedit"));
         grandchild.parent_pid = Some(11);
-        let mut orphan = process(13, "init-child", None);
-        orphan.parent_pid = Some(0);
-        let processes = vec![process(10, "reframe", None), child, grandchild, orphan];
-        let own = own_pids(&processes, 10);
-        assert_eq!(own, HashSet::from([10, 11, 12]));
-        assert!(own_pids(&processes, 0).is_empty());
+        let desktop = state(
+            vec![
+                process(10, "reframe", Some("/usr/bin/reframe")),
+                child,
+                grandchild,
+            ],
+            vec![
+                window("me", 10, 0),
+                window("xterm", 11, 1),
+                window("gedit", 12, 2),
+            ],
+        );
+        let options = DiscoveryOptions {
+            self_pid: 10,
+            ..DiscoveryOptions::default()
+        };
+        let keys: Vec<String> = group_windows(&desktop, &options)
+            .into_iter()
+            .map(|g| g.key)
+            .collect();
+        assert_eq!(keys, vec!["exe:/usr/bin/xterm", "exe:/usr/bin/gedit"]);
     }
 }
