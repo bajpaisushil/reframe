@@ -1,0 +1,197 @@
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  min-width: 0;
+}
+
+.titleText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.modeSummary {
+  min-height: var(--leading-sm);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--text-secondary);
+}
+
+/* ---- Sections ------------------------------------------------------------------------------ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 20px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.sectionCount {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sectionAction {
+  flex: none;
+}
+
+.textButton {
+  padding: 2px 6px;
+  margin-right: -6px;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.textButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.row + .row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rowName {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-medium);
+}
+
+.rowDetail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.emptyRow {
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* ---- Close checklist ------------------------------------------------------------------------- */
+
+.closeRow {
+  padding-left: var(--space-3);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.closeRow:hover {
+  background: var(--bg-hover);
+}
+
+.closeText {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.closeText .rowName {
+  max-width: 100%;
+}
+
+.closeTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--text-secondary);
+}
+
+.unchecked .closeText,
+.unchecked > :global(span[aria-hidden]) {
+  opacity: 0.62;
+}
+
+.closeNote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--text-tertiary);
+}
+
+.closeNoteIcon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--success-text);
+}
+
+/* ---- Footer ---------------------------------------------------------------------------------- */
+
+.footerSummary {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,179 @@
+.panel {
+  padding-top: var(--space-6);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.day {
+  padding-left: 2px;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-2) var(--space-2-5);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.linked {
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.linked:hover {
+  background: var(--bg-hover);
+}
+
+.linked:focus-visible {
+  outline-offset: -2px;
+}
+
+.kind {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.accent {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.success {
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+.warning {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.danger {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.neutral {
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.messageSplit {
+  color: var(--text-secondary);
+}
+
+.inlineWorkspace {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.inlineWorkspace :global(.emoji) {
+  margin-right: 5px;
+  font-size: 13px;
+}
+
+.workspaceLine {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.workspaceLine :global(.emoji) {
+  font-size: 12px;
+}
+
+.time {
+  flex: none;
+  min-width: 64px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Restores ---------------------------------------------------------------------------------- */
+
+.runRow {
+  min-height: 52px;
+}
+
+.runName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-medium);
+}
+
+.runFacts {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  flex: none;
+  color: var(--icon-muted);
+  transition: transform var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.runRow:hover .chevron {
+  color: var(--text-secondary);
+  transform: translateX(2px);
+}

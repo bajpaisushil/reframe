@@ -1,0 +1,21 @@
+.content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.text {
+  color: var(--text-secondary);
+}
+
+.name {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.error {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--danger-text);
+}
