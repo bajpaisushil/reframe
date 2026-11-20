@@ -40,20 +40,22 @@ struct Status {
     net: NetState,
     icccm: Option<IcccmState>,
     map_state: MapState,
+    /// The window manager maintains `_NET_WM_STATE_HIDDEN` (see [`ewmh::is_minimized`]).
+    hidden_supported: bool,
 }
 
 impl Status {
     fn is_minimized(&self) -> bool {
-        self.net.hidden || self.icccm == Some(IcccmState::Iconic)
+        ewmh::is_minimized(&self.net, self.icccm, self.hidden_supported)
     }
 
     fn state(&self) -> WindowState {
-        ewmh::window_state(&self.net, self.icccm)
+        ewmh::window_state(&self.net, self.icccm, self.hidden_supported)
     }
 }
 
 /// Current state of a window; a missing window is a protocol error (mapped to NotFound).
-fn status(c: &Conn, window: Window) -> XResult<Status> {
+fn status(c: &Conn, wm: &WmInfo, window: Window) -> XResult<Status> {
     let attrs = c.conn.get_window_attributes(window)?;
     let net = c.prop(window, c.atoms._NET_WM_STATE, 64)?;
     let wm_state = c.prop(window, c.atoms.WM_STATE, 2)?;
@@ -70,6 +72,7 @@ fn status(c: &Conn, window: Window) -> XResult<Status> {
         net,
         icccm,
         map_state: attrs.map_state,
+        hidden_supported: wm.supports(c.atoms._NET_WM_STATE_HIDDEN),
     })
 }
 
@@ -131,11 +134,11 @@ fn activate(c: &Conn, window: Window) -> XResult<()> {
 fn unminimize(c: &Conn, wm: &WmInfo, window: Window) -> XResult<()> {
     c.conn.map_window(window)?;
     c.flush()?;
-    let restored = wait_for(STATE_TIMEOUT, || Ok(!status(c, window)?.is_minimized()))?;
+    let restored = wait_for(STATE_TIMEOUT, || Ok(!status(c, wm, window)?.is_minimized()))?;
     if !restored && wm.supports(c.atoms._NET_ACTIVE_WINDOW) {
         activate(c, window)?;
         c.flush()?;
-        wait_for(STATE_TIMEOUT, || Ok(!status(c, window)?.is_minimized()))?;
+        wait_for(STATE_TIMEOUT, || Ok(!status(c, wm, window)?.is_minimized()))?;
     }
     Ok(())
 }
@@ -245,7 +248,7 @@ fn move_resize(
 pub(crate) fn set_placement(c: &Conn, window: Window, placement: &WindowPlacement) -> XResult<()> {
     let a = &c.atoms;
     let wm = detect_wm(c)?;
-    let before = status(c, window)?;
+    let before = status(c, &wm, window)?;
     let target = placement.state;
     let managed = wm.is_ewmh() || before.icccm.is_some();
     let can_change_state = wm.is_ewmh();
@@ -277,7 +280,7 @@ pub(crate) fn set_placement(c: &Conn, window: Window, placement: &WindowPlacemen
     if left_state {
         c.flush()?;
         wait_for(STATE_TIMEOUT, || {
-            let s = status(c, window)?;
+            let s = status(c, &wm, window)?;
             Ok(!s.net.maximized_vert && !s.net.maximized_horz && !s.net.fullscreen)
         })?;
     }
@@ -324,7 +327,9 @@ pub(crate) fn set_placement(c: &Conn, window: Window, placement: &WindowPlacemen
     }
     c.flush()?;
     if target != WindowState::Normal && !stay_minimized {
-        let reached = wait_for(STATE_TIMEOUT, || Ok(status(c, window)?.state() == target))?;
+        let reached = wait_for(STATE_TIMEOUT, || {
+            Ok(status(c, &wm, window)?.state() == target)
+        })?;
         if !reached {
             log::debug!(
                 "window manager did not apply {target:?} to {}",
@@ -376,7 +381,7 @@ pub(crate) fn close_window(c: &Conn, window: Window) -> XResult<()> {
 /// Bring a window to the front and give it the input focus, un-minimizing it first.
 pub(crate) fn focus_window(c: &Conn, window: Window) -> XResult<()> {
     let wm = detect_wm(c)?;
-    let before = status(c, window)?;
+    let before = status(c, &wm, window)?;
     if before.is_minimized() {
         c.conn.map_window(window)?;
     }
@@ -397,7 +402,7 @@ pub(crate) fn focus_window(c: &Conn, window: Window) -> XResult<()> {
         c.conn.map_window(window)?;
         c.flush()?;
         wait_for(STATE_TIMEOUT, || {
-            Ok(status(c, window)?.map_state == MapState::VIEWABLE)
+            Ok(status(c, &wm, window)?.map_state == MapState::VIEWABLE)
         })?;
     }
     c.conn.configure_window(

@@ -222,8 +222,6 @@ pub(crate) type PropCookie<'c> = Cookie<'c, RustConnection, GetPropertyReply>;
 pub(crate) struct Conn {
     pub conn: RustConnection,
     pub root: Window,
-    pub screen_width: u16,
-    pub screen_height: u16,
     pub atoms: Atoms,
     /// RandR version, when the extension is present.
     pub randr: Option<(u32, u32)>,
@@ -238,13 +236,12 @@ impl Conn {
             return Err(XError::Connect("DISPLAY is not set".into()));
         };
         let (conn, screen_num) = RustConnection::connect(Some(display))?;
-        let screen = conn
+        let root = conn
             .setup()
             .roots
             .get(screen_num)
-            .ok_or_else(|| XError::Other(format!("the X server has no screen {screen_num}")))?;
-        let (root, screen_width, screen_height) =
-            (screen.root, screen.width_in_pixels, screen.height_in_pixels);
+            .ok_or_else(|| XError::Other(format!("the X server has no screen {screen_num}")))?
+            .root;
         let atoms = Atoms::new(&conn)?.reply()?;
         let randr = if conn
             .extension_information(randr::X11_EXTENSION_NAME)?
@@ -267,8 +264,6 @@ impl Conn {
         Ok(Self {
             conn,
             root,
-            screen_width,
-            screen_height,
             atoms,
             randr,
             xres,
@@ -321,6 +316,23 @@ impl Conn {
 
     pub fn flush(&self) -> XResult<()> {
         Ok(self.conn.flush()?)
+    }
+
+    /// Drop everything in the event queue. Reframe selects no events, so it only holds the
+    /// errors of requests whose replies were not awaited (a window vanishing while it is being
+    /// read, fire-and-forget requests) and the few events every client gets (MappingNotify).
+    /// x11rb keeps those until they are read, so the queue would otherwise grow for the whole
+    /// life of the connection.
+    fn discard_events(&self) {
+        while let Ok(Some(event)) = self.conn.poll_for_event() {
+            if let x11rb::protocol::Event::Error(e) = event {
+                log::debug!(
+                    "ignoring X11 error {:?} in {}",
+                    e.error_kind,
+                    e.request_name.unwrap_or("a request")
+                );
+            }
+        }
     }
 }
 
@@ -438,18 +450,69 @@ impl X11 {
     /// discarded and `op` is retried once on a new connection.
     pub fn run<T>(&self, op: impl Fn(&Conn) -> XResult<T>) -> XResult<T> {
         let conn = self.connection()?;
-        match op(&conn) {
+        match self.attempt(&conn, &op) {
             Err(e) if e.is_connection() => {
-                self.invalidate(&conn);
                 log::info!("X11 connection lost ({e:?}); reconnecting");
                 let conn = self.connection()?;
-                let result = op(&conn);
-                if result.as_ref().is_err_and(XError::is_connection) {
-                    self.invalidate(&conn);
-                }
-                result
+                self.attempt(&conn, &op)
             }
             other => other,
         }
+    }
+
+    /// Run `op` once: afterwards a broken connection is discarded, a live one has its event
+    /// queue emptied.
+    fn attempt<T>(&self, conn: &Arc<Conn>, op: &impl Fn(&Conn) -> XResult<T>) -> XResult<T> {
+        let result = op(conn);
+        if result.as_ref().is_err_and(XError::is_connection) {
+            self.invalidate(conn);
+        } else {
+            conn.discard_events();
+        }
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The X display for tests that need a real X server (`run-x11-tests.sh` sets
+    /// `REFRAME_X11_TESTS=1` and `DISPLAY`); `None` skips the test.
+    fn test_display(test: &str) -> Option<String> {
+        let display = std::env::var("DISPLAY").ok();
+        if std::env::var("REFRAME_X11_TESTS").as_deref() != Ok("1") || display.is_none() {
+            eprintln!(
+                "skipping {test}: needs an X server (REFRAME_X11_TESTS=1 and DISPLAY; run \
+                 crates/reframe-platform/tests/run-x11-tests.sh)"
+            );
+            return None;
+        }
+        display
+    }
+
+    #[test]
+    fn unread_x11_errors_do_not_pile_up() {
+        let Some(display) = test_display("unread_x11_errors_do_not_pile_up") else {
+            return;
+        };
+        let x11 = X11::new(Some(display));
+        // Requests about a window that does not exist whose replies are never awaited, as when
+        // a window vanishes while windows() is reading it: x11rb queues their errors as events.
+        for _ in 0..20 {
+            x11.run(|c| {
+                let missing = c.conn.generate_id()?;
+                drop(c.prop(missing, c.atoms.WM_STATE, 2)?);
+                c.conn.map_window(missing)?;
+                c.flush()
+            })
+            .expect("requests are sent");
+        }
+        // A round trip: every error above has arrived before its reply.
+        x11.run(|c| Ok(c.conn.get_input_focus()?.reply()?.focus))
+            .expect("round trip");
+        let conn = x11.connection().expect("connection");
+        let queued = conn.conn.poll_for_event().expect("connection is fine");
+        assert!(queued.is_none(), "events left queued: {queued:?}");
     }
 }

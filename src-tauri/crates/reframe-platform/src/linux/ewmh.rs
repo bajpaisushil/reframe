@@ -102,11 +102,28 @@ impl IcccmState {
     }
 }
 
-/// Reframe's window state from `_NET_WM_STATE` and `WM_STATE`. Minimized wins over
-/// fullscreen, which wins over maximized (a minimized maximized window is minimized).
-/// Maximized means maximized in both directions; half-maximized windows are Normal.
-pub(crate) fn window_state(net: &NetState, icccm: Option<IcccmState>) -> WindowState {
-    if net.hidden || icccm == Some(IcccmState::Iconic) {
+/// Whether a window is minimized. `hidden_supported` means the window manager maintains
+/// `_NET_WM_STATE_HIDDEN` (lists it in `_NET_SUPPORTED`): such window managers also put windows
+/// on other desktops (and shaded windows) into ICCCM IconicState, so only the EWMH flag counts,
+/// as EWMH asks of pagers. Otherwise IconicState means minimized.
+pub(crate) fn is_minimized(
+    net: &NetState,
+    icccm: Option<IcccmState>,
+    hidden_supported: bool,
+) -> bool {
+    net.hidden || (!hidden_supported && icccm == Some(IcccmState::Iconic))
+}
+
+/// Reframe's window state from `_NET_WM_STATE` and `WM_STATE` (see [`is_minimized`] for
+/// `hidden_supported`). Minimized wins over fullscreen, which wins over maximized (a minimized
+/// maximized window is minimized). Maximized means maximized in both directions;
+/// half-maximized windows are Normal.
+pub(crate) fn window_state(
+    net: &NetState,
+    icccm: Option<IcccmState>,
+    hidden_supported: bool,
+) -> WindowState {
+    if is_minimized(net, icccm, hidden_supported) {
         WindowState::Minimized
     } else if net.fullscreen {
         WindowState::Fullscreen
@@ -285,37 +302,69 @@ mod tests {
 
     #[test]
     fn net_wm_state_to_window_state() {
-        let normal = NetState::default();
-        assert_eq!(window_state(&normal, None), WindowState::Normal);
-        assert_eq!(
-            window_state(&normal, Some(IcccmState::Normal)),
-            WindowState::Normal
-        );
+        for ewmh in [true, false] {
+            let normal = NetState::default();
+            assert_eq!(window_state(&normal, None, ewmh), WindowState::Normal);
+            assert_eq!(
+                window_state(&normal, Some(IcccmState::Normal), ewmh),
+                WindowState::Normal
+            );
+            let max = NetState {
+                maximized_vert: true,
+                maximized_horz: true,
+                ..Default::default()
+            };
+            assert_eq!(window_state(&max, None, ewmh), WindowState::Maximized);
+            let half = NetState {
+                maximized_vert: true,
+                ..Default::default()
+            };
+            assert_eq!(window_state(&half, None, ewmh), WindowState::Normal);
+            let full = NetState {
+                fullscreen: true,
+                ..max
+            };
+            assert_eq!(window_state(&full, None, ewmh), WindowState::Fullscreen);
+            let hidden = NetState {
+                hidden: true,
+                ..full
+            };
+            assert_eq!(window_state(&hidden, None, ewmh), WindowState::Minimized);
+            assert_eq!(
+                window_state(&hidden, Some(IcccmState::Iconic), ewmh),
+                WindowState::Minimized
+            );
+        }
+    }
+
+    #[test]
+    fn iconic_state_means_minimized_only_without_net_wm_state_hidden() {
         let max = NetState {
             maximized_vert: true,
             maximized_horz: true,
             ..Default::default()
         };
-        assert_eq!(window_state(&max, None), WindowState::Maximized);
-        let half = NetState {
-            maximized_vert: true,
-            ..Default::default()
-        };
-        assert_eq!(window_state(&half, None), WindowState::Normal);
-        let full = NetState {
-            fullscreen: true,
-            ..max
-        };
-        assert_eq!(window_state(&full, None), WindowState::Fullscreen);
-        let hidden = NetState {
-            hidden: true,
-            ..full
-        };
-        assert_eq!(window_state(&hidden, None), WindowState::Minimized);
+        // ICCCM-only window manager: IconicState is the only minimized signal.
         assert_eq!(
-            window_state(&max, Some(IcccmState::Iconic)),
+            window_state(&max, Some(IcccmState::Iconic), false),
             WindowState::Minimized
         );
+        assert!(is_minimized(&max, Some(IcccmState::Iconic), false));
+        // EWMH window managers (openbox, mutter) also iconify windows on other desktops and
+        // shaded windows; without _NET_WM_STATE_HIDDEN those are not minimized.
+        assert_eq!(
+            window_state(&max, Some(IcccmState::Iconic), true),
+            WindowState::Maximized
+        );
+        assert_eq!(
+            window_state(&NetState::default(), Some(IcccmState::Iconic), true),
+            WindowState::Normal
+        );
+        assert!(!is_minimized(
+            &NetState::default(),
+            Some(IcccmState::Iconic),
+            true
+        ));
     }
 
     #[test]

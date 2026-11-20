@@ -5,8 +5,10 @@
 #     LEFT 1280x1080+0+0 (primary) and RIGHT 1280x1080+1280+0
 #   - Xft.dpi 120 in the resource database (scale factor 1.25)
 #   - openbox as the (EWMH) window manager
-# Display :92 is handed to a test that starts, kills and restarts its own bare Xvfb there.
-# Two tests are then re-run in simulated Wayland sessions (with and without XWayland).
+# Display :92 is handed to tests that start their own Xvfb there (a bare server that is
+# killed and restarted; a server whose screen is resized). The unit tests of the X11 layer
+# that need an X server run next, then two tests are re-run in simulated Wayland sessions
+# (with and without XWayland).
 #
 # Usage: bash crates/reframe-platform/tests/run-x11-tests.sh [extra cargo test args]
 # Override the displays with REFRAME_X11_DISPLAY / REFRAME_X11_SECONDARY (numbers only).
@@ -89,7 +91,12 @@ echo "Xft.dpi: 120" | xrdb -nocpp -merge
 echo "starting openbox"
 openbox --sm-disable >"$log_dir/openbox.log" 2>&1 &
 pids+=($!)
-wm_ready() { xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"; }
+# openbox sets _NET_SUPPORTING_WM_CHECK before it has finished starting; windows mapped before
+# _NET_CLIENT_LIST exists may never be managed.
+wm_ready() {
+  xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id" &&
+    xprop -root _NET_CLIENT_LIST | grep -q "_NET_CLIENT_LIST(WINDOW)"
+}
 if ! wait_for 100 wm_ready; then
   echo "openbox did not start" >&2
   exit 1
@@ -102,6 +109,10 @@ cd "$src_tauri"
 echo "== X11 session"
 REFRAME_X11_TESTS=1 REFRAME_X11_SECONDARY_DISPLAY=":$secondary_num" \
   cargo test -p reframe-platform --test x11_integration -- --test-threads=1 "$@"
+
+echo "== X11 session: unit tests of the X11 layer that need an X server"
+REFRAME_X11_TESTS=1 \
+  cargo test -p reframe-platform --lib -- --test-threads=1 linux::x11:: "$@"
 
 # Session detection reads the environment: simulate Wayland sessions around the same X server
 # (WAYLAND_DISPLAY only has to be set; nothing connects to it).

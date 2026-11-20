@@ -190,11 +190,23 @@ fn randr_outputs(c: &Conn, with_names: bool) -> XResult<Option<Vec<RawMonitor>>>
     Ok(Some(monitors))
 }
 
-fn screen_monitor(c: &Conn) -> RawMonitor {
+/// The X screen (root window) as it is now. RandR resizes the screen when monitors are added
+/// or removed, so the size announced when the connection was set up goes stale.
+fn screen_rect(c: &Conn) -> XResult<Rect> {
+    let root = c.conn.get_geometry(c.root)?.reply()?;
+    Ok(Rect::new(
+        0,
+        0,
+        i32::from(root.width),
+        i32::from(root.height),
+    ))
+}
+
+fn screen_monitor(screen: Rect) -> RawMonitor {
     RawMonitor {
         id: "screen".to_string(),
         name: "X screen".to_string(),
-        bounds: Rect::new(0, 0, i32::from(c.screen_width), i32::from(c.screen_height)),
+        bounds: screen,
         primary: true,
     }
 }
@@ -207,7 +219,7 @@ pub(super) fn monitor_rects(c: &Conn, with_names: bool) -> XResult<Vec<RawMonito
         Some(m) if !m.is_empty() => m,
         _ => match randr_outputs(c, with_names)? {
             Some(m) if !m.is_empty() => m,
-            _ => vec![screen_monitor(c)],
+            _ => vec![screen_monitor(screen_rect(c)?)],
         },
     };
     let mut seen_primary = false;
@@ -221,6 +233,20 @@ pub(super) fn monitor_rects(c: &Conn, with_names: bool) -> XResult<Vec<RawMonito
     Ok(monitors)
 }
 
+/// The `_NET_WORKAREA` rectangle of `desktop` (the first desktop's when the list is shorter).
+/// Any client can write the property: values outside X11's 16-bit coordinate space are
+/// garbage and make the rectangle unusable (they would also overflow `Rect` arithmetic).
+fn net_workarea(values: &[u32], desktop: u32) -> Option<Rect> {
+    let v = usize::try_from(desktop)
+        .ok()
+        .and_then(|d| d.checked_mul(4))
+        .and_then(|start| values.get(start..start.checked_add(4)?))
+        .or_else(|| values.get(..4))?;
+    let pos = |v: u32| i16::try_from(v).ok().map(i32::from);
+    let size = |v: u32| u16::try_from(v).ok().map(i32::from);
+    Some(Rect::new(pos(v[0])?, pos(v[1])?, size(v[2])?, size(v[3])?)).filter(|r| !r.is_empty())
+}
+
 /// `_NET_WORKAREA` of the current desktop and the struts of all managed windows.
 fn work_area_inputs(c: &Conn, screen: Rect) -> XResult<(Option<Rect>, Vec<Strut>)> {
     let a = &c.atoms;
@@ -231,21 +257,8 @@ fn work_area_inputs(c: &Conn, screen: Rect) -> XResult<(Option<Rect>, Vec<Strut>
     let desktop = reply_opt(current)?
         .as_ref()
         .and_then(first_u32)
-        .unwrap_or(0) as usize;
-    let to_i32 = |v: u32| i32::try_from(v).ok();
-    let net_workarea = desktop
-        .checked_mul(4)
-        .and_then(|start| workarea.get(start..start + 4))
-        .or_else(|| workarea.get(..4))
-        .and_then(|v| {
-            Some(Rect::new(
-                to_i32(v[0])?,
-                to_i32(v[1])?,
-                to_i32(v[2])?,
-                to_i32(v[3])?,
-            ))
-        })
-        .filter(|r| !r.is_empty());
+        .unwrap_or(0);
+    let net_workarea = net_workarea(&workarea, desktop);
 
     let clients = reply_opt(clients)?.map(|r| u32s(&r)).unwrap_or_default();
     let cookies = clients
@@ -287,7 +300,7 @@ fn xft_scale(c: &Conn) -> XResult<f64> {
 /// List monitors with work areas and scale.
 pub(crate) fn list_monitors(c: &Conn) -> XResult<Vec<MonitorInfo>> {
     let raw = monitor_rects(c, true)?;
-    let screen = Rect::new(0, 0, i32::from(c.screen_width), i32::from(c.screen_height));
+    let screen = screen_rect(c)?;
     let (net_workarea, struts) = work_area_inputs(c, screen)?;
     let scale = xft_scale(c)?;
     let count = raw.len();
@@ -302,4 +315,54 @@ pub(crate) fn list_monitors(c: &Conn) -> XResult<Vec<MonitorInfo>> {
             is_primary: m.primary,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn net_workarea_of_the_current_desktop() {
+        let two_desktops = [0, 30, 2560, 1050, 0, 0, 2560, 1040];
+        assert_eq!(
+            net_workarea(&two_desktops, 0),
+            Some(Rect::new(0, 30, 2560, 1050))
+        );
+        assert_eq!(
+            net_workarea(&two_desktops, 1),
+            Some(Rect::new(0, 0, 2560, 1040))
+        );
+        // A desktop beyond the list (or a bogus index) falls back to the first desktop.
+        assert_eq!(
+            net_workarea(&two_desktops, 7),
+            Some(Rect::new(0, 30, 2560, 1050))
+        );
+        assert_eq!(
+            net_workarea(&two_desktops, u32::MAX),
+            Some(Rect::new(0, 30, 2560, 1050))
+        );
+        assert_eq!(net_workarea(&[], 0), None);
+        assert_eq!(net_workarea(&[0, 0, 100], 0), None);
+        assert_eq!(net_workarea(&[0, 0, 0, 100], 0), None);
+    }
+
+    #[test]
+    fn garbage_net_workarea_is_ignored() {
+        // Values no X11 screen can have; using them would overflow `Rect::right()`.
+        let screen = Rect::new(0, 0, 1920, 1080);
+        for garbage in [
+            [0x7FFF_FFFF, 0, 0x7FFF_FFFF, 1080],
+            [0, 0, 0xFFFF_FFFF, 1080],
+            [0xFFFF_FFF0, 0, 1920, 1080],
+        ] {
+            let wa = net_workarea(&garbage, 0);
+            assert_eq!(wa, None, "{garbage:?}");
+            assert_eq!(geometry::work_area(screen, 1, wa, screen, &[]), screen);
+        }
+        // The largest values X11 allows still work.
+        assert_eq!(
+            net_workarea(&[32767, 32767, 65535, 65535], 0),
+            Some(Rect::new(32767, 32767, 65535, 65535))
+        );
+    }
 }

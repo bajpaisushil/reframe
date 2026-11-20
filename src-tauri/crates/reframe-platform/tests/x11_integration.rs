@@ -410,6 +410,103 @@ fn xterm_window_lifecycle() {
     ));
 }
 
+/// Send an EWMH client message about `window` to the root window of `$DISPLAY`.
+fn ewmh_message(message: &str, window: u32, data: [u32; 5]) {
+    use x11rb::connection::Connection as _;
+    use x11rb::protocol::xproto::{ClientMessageEvent, ConnectionExt as _, EventMask};
+    let x = TestWindows::new();
+    let root = x.conn.setup().roots[0].root;
+    let event = ClientMessageEvent::new(32, window, x.atom(message), data);
+    x.conn
+        .send_event(
+            false,
+            root,
+            EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
+            event,
+        )
+        .unwrap()
+        .check()
+        .unwrap();
+}
+
+fn current_desktop() -> Option<u32> {
+    command_output("xprop", &["-root", "_NET_CURRENT_DESKTOP"], &display())
+        .split('=')
+        .nth(1)
+        .and_then(|v| v.trim().parse().ok())
+}
+
+/// Switches back to the first desktop when dropped, so a failing test leaves no trace.
+struct BackToFirstDesktop;
+
+impl Drop for BackToFirstDesktop {
+    fn drop(&mut self) {
+        ewmh_message("_NET_CURRENT_DESKTOP", 0, [0, 0, 0, 0, 0]);
+        let _ = wait_until(WINDOW_TIMEOUT, || {
+            (current_desktop() == Some(0)).then_some(())
+        });
+    }
+}
+
+/// Window managers put windows on other desktops into ICCCM IconicState (openbox, mutter):
+/// they are not minimized, and arranging them must not switch the user's desktop.
+#[test]
+fn windows_on_other_desktops() {
+    let Some(_guard) = enabled("windows_on_other_desktops") else {
+        return;
+    };
+    let _reset = BackToFirstDesktop;
+    let platform = LinuxPlatform::new();
+    let (pid, window) = launch_xterm(&platform, "desktop", &[]);
+    let id = u32::from_str_radix(window.id.as_str().trim_start_matches("0x"), 16).unwrap();
+    assert_eq!(current_desktop(), Some(0));
+    // openbox activates a new window shortly after mapping it, which also brings it to the
+    // current desktop: wait for that, and repeat the request if it was undone anyway.
+    wait_for_window(&platform, &window.id, "focused", |w| w.is_focused);
+    let elsewhere = wait_until(WINDOW_TIMEOUT, || {
+        ewmh_message("_NET_WM_DESKTOP", id, [1, 2, 0, 0, 0]);
+        wait_until(Duration::from_millis(500), || {
+            let windows = platform.windows().ok()?;
+            windows
+                .into_iter()
+                .find(|w| w.id == window.id && w.desktop == Some(1))
+        })
+    })
+    .expect("window moved to desktop 1");
+    assert_eq!(elsewhere.state, WindowState::Normal, "{elsewhere:#?}");
+    assert_eq!(elsewhere.normal_bounds, Some(elsewhere.bounds));
+
+    // Moving it keeps it (and the user) where they are.
+    let target = Rect::new(220, 140, 600, 380);
+    place(&platform, &window.id, target, WindowState::Normal);
+    let moved = wait_for_window(&platform, &window.id, "moved on desktop 1", |w| {
+        w.bounds.x == target.x && w.bounds.y == target.y
+    });
+    assert_eq!(moved.desktop, Some(1));
+    assert_eq!(moved.state, WindowState::Normal);
+    assert_eq!(current_desktop(), Some(0), "the current desktop changed");
+
+    // A minimized window stays minimized on another desktop (openbox ignores requests to
+    // minimize windows on other desktops, so minimize it here first).
+    ewmh_message("_NET_WM_DESKTOP", id, [0, 2, 0, 0, 0]);
+    wait_for_window(&platform, &window.id, "back on desktop 0", |w| {
+        w.desktop == Some(0)
+    });
+    place(&platform, &window.id, target, WindowState::Minimized);
+    wait_for_window(&platform, &window.id, "minimized", |w| {
+        w.state == WindowState::Minimized
+    });
+    ewmh_message("_NET_WM_DESKTOP", id, [1, 2, 0, 0, 0]);
+    let minimized = wait_for_window(&platform, &window.id, "moved to desktop 1", |w| {
+        w.desktop == Some(1)
+    });
+    assert_eq!(minimized.state, WindowState::Minimized, "{minimized:#?}");
+    assert_eq!(minimized.normal_bounds, None);
+    assert_eq!(current_desktop(), Some(0), "the current desktop changed");
+
+    close_and_wait(&platform, &window, pid);
+}
+
 #[test]
 fn icons_processes_and_locate() {
     let Some(_guard) = enabled("icons_processes_and_locate") else {
@@ -544,7 +641,12 @@ struct TestWindows {
 
 impl TestWindows {
     fn new() -> Self {
-        let (conn, _) = x11rb::connect(None).expect("connect to the test X server");
+        Self::on(None)
+    }
+
+    /// Test windows on `display` (`None`: `$DISPLAY`).
+    fn on(display: Option<&str>) -> Self {
+        let (conn, _) = x11rb::connect(display).expect("connect to the test X server");
         Self {
             conn,
             windows: Vec::new(),
@@ -805,6 +907,11 @@ struct OwnedXvfb {
 
 impl OwnedXvfb {
     fn start(display: &str) -> Self {
+        Self::start_sized(display, "1600x900")
+    }
+
+    /// Start Xvfb with a `WIDTHxHEIGHT` screen (also the largest size RandR can set later).
+    fn start_sized(display: &str, size: &str) -> Self {
         let number = display.trim_start_matches(':');
         let socket = PathBuf::from(format!("/tmp/.X11-unix/X{number}"));
         assert!(
@@ -816,7 +923,7 @@ impl OwnedXvfb {
                 display,
                 "-screen",
                 "0",
-                "1600x900x24",
+                &format!("{size}x24"),
                 "-nolisten",
                 "tcp",
                 "-noreset",
@@ -944,6 +1051,136 @@ fn bare_x_server_and_reconnect() {
     assert!(windows.is_empty());
     assert_eq!(platform.monitors().expect("monitors").len(), 1);
     drop(server);
+}
+
+/// A helper process owned by a test (a window manager); terminated (SIGTERM) when dropped.
+struct OwnedChild(Child);
+
+impl Drop for OwnedChild {
+    fn drop(&mut self) {
+        let _ = Command::new("kill")
+            .args(["-TERM", &self.0.id().to_string()])
+            .status();
+        if wait_until(Duration::from_secs(10), || self.0.try_wait().ok().flatten()).is_none() {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+}
+
+fn start_openbox(display: &str) -> OwnedChild {
+    let child = Command::new("openbox")
+        .arg("--sm-disable")
+        .env("DISPLAY", display)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("start openbox");
+    let wm = OwnedChild(child);
+    // openbox claims the screen (_NET_SUPPORTING_WM_CHECK) before it has finished starting;
+    // windows mapped before _NET_CLIENT_LIST exists may never be managed.
+    let ready = wait_until(Duration::from_secs(10), || {
+        let root = command_output(
+            "xprop",
+            &["-root", "_NET_SUPPORTING_WM_CHECK", "_NET_CLIENT_LIST"],
+            display,
+        );
+        (root.contains("_NET_SUPPORTING_WM_CHECK(WINDOW)")
+            && root.contains("_NET_CLIENT_LIST(WINDOW)"))
+        .then_some(())
+    });
+    assert!(ready.is_some(), "openbox did not start on {display}");
+    wm
+}
+
+/// Run `xrandr` on `display`. Xvfb cannot re-enable its output after some screen size
+/// changes and xrandr then reports an error; only the screen size and monitors matter here.
+fn xrandr(display: &str, args: &[&str]) {
+    let _ = Command::new("xrandr")
+        .args(args)
+        .env("DISPLAY", display)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Current root window size according to `xdpyinfo`.
+fn screen_size(display: &str) -> (i32, i32) {
+    let info = command_output("xdpyinfo", &[], display);
+    info.lines()
+        .find_map(|l| l.trim().strip_prefix("dimensions:"))
+        .and_then(|v| v.split_whitespace().next())
+        .and_then(|dims| dims.split_once('x'))
+        .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
+        .unwrap_or_else(|| panic!("xdpyinfo output lacks the screen size: {info}"))
+}
+
+/// The screen grows after the platform connected (a monitor was plugged in): panel struts on
+/// the right/bottom edges are measured from the *current* screen edges.
+#[test]
+fn work_area_follows_screen_resize() {
+    let Some(_guard) = enabled("work_area_follows_screen_resize") else {
+        return;
+    };
+    let Ok(display) = std::env::var("REFRAME_X11_SECONDARY_DISPLAY") else {
+        eprintln!(
+            "skipping work_area_follows_screen_resize: REFRAME_X11_SECONDARY_DISPLAY not set"
+        );
+        return;
+    };
+    use x11rb::protocol::xproto::{AtomEnum, PropMode};
+    use x11rb::wrapper::ConnectionExt as _;
+    let _server = OwnedXvfb::start_sized(&display, "2560x1080");
+    xrandr(&display, &["--fb", "1920x1080"]);
+    assert_eq!(screen_size(&display), (1920, 1080));
+    let platform = LinuxPlatform::for_display(display.clone());
+    let before = platform.monitors().expect("monitors before the resize");
+    eprintln!("1920 pixels wide: {before:?}");
+
+    xrandr(&display, &["--fb", "2560x1080"]);
+    assert_eq!(screen_size(&display), (2560, 1080));
+    xrandr(
+        &display,
+        &["--setmonitor", "LEFT", "1280/338x1080/286+0+0", "none"],
+    );
+    xrandr(
+        &display,
+        &["--setmonitor", "RIGHT", "1280/338x1080/286+1280+0", "none"],
+    );
+    let _wm = start_openbox(&display);
+
+    // A 48px panel along the right edge of the screen, i.e. on the RIGHT monitor.
+    let mut x = TestWindows::on(Some(&display));
+    let panel = x.create("reframe-it-right-panel", (48, 1080), false, true, |x, w| {
+        x.set_atoms(w, "_NET_WM_WINDOW_TYPE", &["_NET_WM_WINDOW_TYPE_DOCK"]);
+        x.conn
+            .change_property32(
+                PropMode::REPLACE,
+                w,
+                x.atom("_NET_WM_STRUT_PARTIAL"),
+                AtomEnum::CARDINAL,
+                &[0, 48, 0, 0, 0, 0, 0, 1079, 0, 0, 0, 0],
+            )
+            .unwrap();
+    });
+    let managed = wait_until(WINDOW_TIMEOUT, || {
+        command_output("xprop", &["-root", "_NET_CLIENT_LIST"], &display)
+            .contains(&format!("{panel:#x}"))
+            .then_some(())
+    });
+    assert!(managed.is_some(), "openbox did not manage the panel");
+    let monitors = wait_until(WINDOW_TIMEOUT, || {
+        let monitors = platform.monitors().ok()?;
+        let right = monitors.iter().find(|m| m.id == "RIGHT")?;
+        (right.work_area != right.bounds).then_some(monitors)
+    })
+    .expect("the panel strut reduces the RIGHT monitor's work area");
+    eprintln!("2560 pixels wide with a right panel: {monitors:?}");
+    let left = monitors.iter().find(|m| m.id == "LEFT").expect("LEFT");
+    let right = monitors.iter().find(|m| m.id == "RIGHT").expect("RIGHT");
+    assert_eq!(right.bounds, Rect::new(1280, 0, 1280, 1080));
+    assert_eq!(right.work_area, Rect::new(1280, 0, 1232, 1080));
+    assert_eq!(left.work_area, left.bounds);
 }
 
 const WAYLAND_REASON: &str = "Wayland compositors do not allow applications to inspect or \

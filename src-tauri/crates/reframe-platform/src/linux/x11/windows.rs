@@ -516,6 +516,7 @@ pub(crate) fn list_windows(c: &Conn, hostname: Option<&str>) -> XResult<Vec<Wind
     };
     let monitors = monitor_rects(c, false)?;
     let monitor_bounds: Vec<Rect> = monitors.iter().map(|m| m.bounds).collect();
+    let hidden_supported = wm.supports(c.atoms._NET_WM_STATE_HIDDEN);
 
     let mut frame_cache = HashMap::new();
     let mut seen = std::collections::HashSet::new();
@@ -531,7 +532,7 @@ pub(crate) fn list_windows(c: &Conn, hostname: Option<&str>) -> XResult<Vec<Wind
         if bounds.is_empty() {
             continue;
         }
-        let state = ewmh::window_state(&raw.net_state, raw.icccm_state);
+        let state = ewmh::window_state(&raw.net_state, raw.icccm_state, hidden_supported);
         let is_focused = match active {
             Some(w) => w == raw.id,
             None => focus_top.is_some_and(|f| f == raw.id || Some(f) == cand.frame),
