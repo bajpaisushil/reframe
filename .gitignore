@@ -1,0 +1,22 @@
+# Dependencies & builds
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+target/
+
+# Editors & OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Claude Code worktrees / local settings
+.claude/worktrees/
+.claude/settings.local.json
