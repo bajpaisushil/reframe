@@ -1,0 +1,35 @@
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.skeletonHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-top: calc(-1 * var(--space-6));
+}
+
+.skeletonTitles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skeletonList {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 60px;
+  padding: 0 var(--space-5);
+}
+
+.skeletonRow + .skeletonRow {
+  border-top: 1px solid var(--border-subtle);
+}

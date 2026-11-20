@@ -1,0 +1,235 @@
+.item {
+  position: relative;
+  background: var(--bg-surface);
+}
+
+.item + .item {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: var(--space-2-5) var(--space-3) var(--space-2-5) var(--space-1-5);
+}
+
+.handle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 32px;
+  margin-right: calc(-1 * var(--space-1));
+  border-radius: var(--radius-xs);
+  color: var(--icon-muted);
+  opacity: 0.7;
+  cursor: grab;
+  touch-action: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.row:hover .handle,
+.handle:focus-visible {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.handle:hover {
+  background: var(--bg-hover);
+}
+
+.dragging .handle {
+  cursor: grabbing;
+}
+
+.position {
+  flex: none;
+  width: 18px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* The launch position differs from the list order (start-after settings): hover explains. */
+.positionAdjusted {
+  color: var(--accent-text);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.positionAdjusted:focus {
+  outline: none;
+}
+
+.iconWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.iconWrap:focus {
+  outline: none;
+}
+
+.runningDot {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--bg-surface);
+}
+
+.expanded .runningDot {
+  box-shadow: 0 0 0 2px var(--bg-surface);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  cursor: default;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--weight-semibold);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--space-2);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.factItem {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Middle dots between facts (chips follow without dots). */
+.factItem + .factItem::before {
+  content: "·";
+  margin-right: var(--space-2);
+  color: var(--icon-muted);
+}
+
+.fact {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--warning-text);
+}
+
+.chip {
+  height: 18px;
+  font-size: 11px;
+}
+
+.trailing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+}
+
+.chevron svg {
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.chevronOpen svg {
+  transform: rotate(180deg);
+}
+
+.off .iconWrap,
+.off .name {
+  opacity: 0.55;
+}
+
+.off .name {
+  font-weight: var(--weight-medium);
+}
+
+.expanded {
+  background: var(--bg-surface);
+}
+
+.expanded .row {
+  background: var(--bg-subtle);
+}
+
+.editor {
+  border-top: 1px solid var(--border-subtle);
+  animation: editor-in var(--duration-slow) var(--ease-out);
+}
+
+@keyframes editor-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.highlighted {
+  animation: row-highlight 2400ms var(--ease-out);
+}
+
+@keyframes row-highlight {
+  0%,
+  35% {
+    background-color: var(--accent-soft);
+  }
+  100% {
+    background-color: var(--bg-surface);
+  }
+}
+
+.dragging {
+  z-index: 2;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-overlay);
+}
+
+.dragging + .item {
+  border-top-color: transparent;
+}
+
+@media (max-width: 1100px) {
+  .trailing {
+    gap: var(--space-2);
+  }
+}

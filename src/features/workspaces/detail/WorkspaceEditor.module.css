@@ -1,0 +1,52 @@
+/* Room under the content for the floating unsaved-changes bar. */
+.withBar {
+  padding-bottom: 136px;
+}
+
+.description {
+  display: block;
+  max-width: 72ch;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.metaBadge {
+  margin-right: var(--space-1);
+}
+
+.metaItem + .metaItem::before {
+  content: "·";
+  margin-right: var(--space-2);
+  color: var(--icon-muted);
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-10);
+}
+
+@media (min-width: 1200px) {
+  .columns {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    align-items: start;
+    gap: var(--space-6);
+  }
+}
