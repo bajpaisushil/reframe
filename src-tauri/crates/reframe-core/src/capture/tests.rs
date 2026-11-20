@@ -484,7 +484,7 @@ fn applications_restored_by_reframe_can_be_captured() {
 
 #[test]
 fn platform_warnings_of_the_fresh_scan_are_included() {
-    let p = MockPlatform::new();
+    let p = linux();
     let pid = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     window(&p, pid, "GIMP");
     let mut state = discovery::gather(&p);
@@ -575,6 +575,7 @@ fn manual_executable_entry_launches_the_program() {
 }
 
 #[test]
+#[cfg(unix)] // real executable files with Unix semantics
 fn manual_entries_are_identified_by_adapters() {
     let dir = tempfile::tempdir().unwrap();
     let exe = program(dir.path(), "code");

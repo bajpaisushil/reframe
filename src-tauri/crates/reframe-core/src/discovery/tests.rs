@@ -10,6 +10,13 @@ use super::test_support::*;
 use super::*;
 use crate::model::{CapabilityLevel, StateDetail};
 
+/// A mock desktop that behaves like Linux on every host, so grouping keys are deterministic.
+fn linux_desktop() -> MockPlatform {
+    let p = MockPlatform::new();
+    set_os(&p, OsKind::Linux);
+    p
+}
+
 fn keys(snapshot: &DesktopSnapshot) -> Vec<&str> {
     snapshot
         .applications
@@ -40,7 +47,7 @@ fn app_by_pid(snapshot: &DesktopSnapshot, pid: u32) -> &DiscoveredApplication {
 
 #[test]
 fn all_windows_of_a_process_form_one_application() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let pid = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     let first = window(&p, pid, "Image 1");
     let second = window(&p, pid, "Image 2");
@@ -66,7 +73,7 @@ fn all_windows_of_a_process_form_one_application() {
 
 #[test]
 fn processes_sharing_an_executable_form_one_application() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let exe = "/opt/google/chrome/chrome";
     let browser = p.add_process("chrome", Some(exe.into()));
     let second_instance = p.add_process("chrome", Some(exe.into()));
@@ -95,7 +102,7 @@ fn processes_sharing_an_executable_form_one_application() {
 
 #[test]
 fn a_package_groups_processes_with_different_executables() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let package = PackageInfo {
         kind: PackageKind::Flatpak,
         id: "org.example.Suite".into(),
@@ -122,7 +129,7 @@ fn a_package_groups_processes_with_different_executables() {
 
 #[test]
 fn windows_executable_paths_are_case_insensitive() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Windows);
     let a = p.add_process(
         "Code.exe",
@@ -148,7 +155,7 @@ fn windows_executable_paths_are_case_insensitive() {
 
 #[test]
 fn processes_without_an_executable_path_group_by_name() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let a = p.add_process("xterm", None);
     let b = p.add_process("xterm", None);
     let c = p.add_process("xclock", None);
@@ -164,7 +171,7 @@ fn processes_without_an_executable_path_group_by_name() {
 
 #[test]
 fn windows_without_a_known_process_group_by_class() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Linux);
     let w1 = p.add_window(0, "Clock", Some("XClock"), rect(300, 300));
     // pid 4242 is not in the process list (exited, or another user's process).
@@ -186,7 +193,7 @@ fn windows_without_a_known_process_group_by_class() {
 
 #[test]
 fn reframe_itself_is_not_listed() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let me = p.add_process("reframe", Some("/usr/bin/reframe".into()));
     let gimp = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     window(&p, me, "Reframe");
@@ -213,7 +220,7 @@ fn applications_restored_by_reframe_are_listed() {
     // Regression: restores start applications detached (`spawn_detached` only changes the
     // process group), so they keep Reframe as their parent process while it runs. Only windows
     // owned by Reframe's own pid are hidden, never those of its descendants.
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Windows);
     let child = |parent: u32, name: &str, exe: &str| {
         p.add_process_info(ProcessInfo {
@@ -258,7 +265,7 @@ fn applications_restored_by_reframe_are_listed() {
 
 #[test]
 fn applications_follow_their_frontmost_window() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let editor = p.add_process("editor", Some("/usr/bin/editor".into()));
     let viewer = p.add_process("viewer", Some("/usr/bin/viewer".into()));
     let e1 = window(&p, editor, "e1");
@@ -284,7 +291,7 @@ fn applications_follow_their_frontmost_window() {
 
 #[test]
 fn stacking_order_wins_over_list_order() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let a = p.add_process("a", Some("/usr/bin/a".into()));
     let b = p.add_process("b", Some("/usr/bin/b".into()));
     window(&p, a, "a");
@@ -297,7 +304,7 @@ fn stacking_order_wins_over_list_order() {
 
 #[test]
 fn shell_components_are_listed_but_not_suggested() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Linux);
     let shell = p.add_process("gnome-shell", Some("/usr/bin/gnome-shell".into()));
     let panel = p.add_process("xfce4-panel", Some("/usr/bin/xfce4-panel".into()));
@@ -318,7 +325,7 @@ fn shell_components_are_listed_but_not_suggested() {
 
 #[test]
 fn system_tables_follow_the_reported_os() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let dock = p.add_process(
         "Dock",
         Some("/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock".into()),
@@ -346,7 +353,7 @@ fn system_tables_follow_the_reported_os() {
 
 #[test]
 fn helpers_and_tiny_windows_are_utilities() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Linux);
     let applet = p.add_process("nm-applet", Some("/usr/bin/nm-applet".into()));
     let eyes = p.add_process("xeyes", Some("/usr/bin/xeyes".into()));
@@ -369,7 +376,7 @@ fn helpers_and_tiny_windows_are_utilities() {
 
 #[test]
 fn exclusions_are_case_insensitive() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let slack = p.add_process("slack", Some("/usr/lib/slack/slack".into()));
     let gimp = p.add_process("gimp-2.10", Some("/usr/bin/gimp-2.10".into()));
     let notes = p.add_process("Notes", None);
@@ -402,7 +409,7 @@ fn exclusions_are_case_insensitive() {
 
 #[test]
 fn adapter_identity_capability_and_details_are_attached() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let code = p.add_process("code", Some("/usr/share/code/code".into()));
     let gimp = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     let w = window(&p, code, "main.rs — reframe");
@@ -439,7 +446,7 @@ fn generic_preview_lists_documents_from_the_command_line() {
     let dir = tempfile::tempdir().unwrap();
     let doc = dir.path().join("notes.txt");
     std::fs::write(&doc, "x").unwrap();
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let pid = p.add_process_info(ProcessInfo {
         command_line: vec![
             "gedit".into(),
@@ -459,7 +466,7 @@ fn generic_preview_lists_documents_from_the_command_line() {
 
 #[test]
 fn a_panicking_identify_skips_only_that_adapter() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let code = p.add_process("code", Some("/usr/share/code/code".into()));
     let gimp = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     window(&p, code, "main.rs");
@@ -495,7 +502,7 @@ fn adapters_failing_after_identification_fall_back_to_generic() {
         PanicAt::Capture,
         PanicAt::Describe,
     ] {
-        let p = MockPlatform::new();
+        let p = linux_desktop();
         let code = p.add_process("code", Some("/usr/share/code/code".into()));
         window(&p, code, "main.rs");
         let adapters = registry(vec![PanicAdapter::new(at, "code")]);
@@ -526,7 +533,7 @@ fn adapters_failing_after_identification_fall_back_to_generic() {
 
 #[test]
 fn processes_without_listed_windows_are_background() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let gimp = p.add_process("gimp", Some("/usr/bin/gimp".into()));
     p.add_process("dbus-daemon", None);
     p.add_process("pipewire", None);
@@ -546,7 +553,7 @@ fn processes_without_listed_windows_are_background() {
 
 #[test]
 fn platform_warnings_are_kept_and_partial_listing_is_explained() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let mut info = p.info();
     info.capabilities.list_windows =
         Capability::partial("Only X11 applications are visible in this Wayland session.");
@@ -567,7 +574,7 @@ fn platform_warnings_are_kept_and_partial_listing_is_explained() {
 
 #[test]
 fn unsupported_window_listing_is_explained_once() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     let mut info = p.info();
     info.capabilities.list_windows = Capability::unsupported("No window manager integration.");
     p.set_info(info);
@@ -611,7 +618,7 @@ fn a_platform_without_window_support_still_produces_a_snapshot() {
 
 #[test]
 fn script_hosted_applications_are_separate() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Linux);
     let meld = p.add_process("meld", Some("/usr/bin/python3.12".into()));
     let terminator = p.add_process("terminator", Some("/usr/bin/python3.12".into()));
@@ -642,7 +649,7 @@ fn script_hosted_applications_are_separate() {
 
 #[test]
 fn script_hosted_names_defer_to_product_names_and_adapters() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     set_os(&p, OsKind::Linux);
     let meld = p.add_process_info(ProcessInfo {
         product_name: Some("Meld Diff Viewer".into()),
@@ -661,7 +668,7 @@ fn script_hosted_names_defer_to_product_names_and_adapters() {
 
 #[test]
 fn an_empty_desktop_is_fine() {
-    let p = MockPlatform::new();
+    let p = linux_desktop();
     p.add_process("systemd", None);
     let snap = scan(&p, &AdapterRegistry::builtin(), &options());
     assert!(snap.applications.is_empty());

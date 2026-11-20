@@ -78,6 +78,16 @@ pub fn document_arguments(command_line: &[String], limit: usize) -> Vec<PathBuf>
         .collect()
 }
 
+/// Whether two paths name the same file for de-duplication. Windows and macOS (by default)
+/// have case-insensitive file systems, so letter case is ignored there.
+pub fn same_path(a: &Path, b: &Path) -> bool {
+    if cfg!(any(windows, target_os = "macos")) {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    } else {
+        a == b
+    }
+}
+
 /// Display a path's final component (`/home/a/code/reframe` → `reframe`).
 pub fn path_label(path: &Path) -> String {
     path.file_name()

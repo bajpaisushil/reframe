@@ -660,7 +660,7 @@ fn command_line_documents(command_line: &[String]) -> Vec<PathBuf> {
         if let Ok(url) = url::Url::parse(arg)
             && let Ok(path) = url.to_file_path()
             && path.is_file()
-            && !documents.contains(&path)
+            && !documents.iter().any(|d| util::same_path(d, &path))
         {
             documents.push(path);
         }
@@ -669,7 +669,7 @@ fn command_line_documents(command_line: &[String]) -> Vec<PathBuf> {
 }
 
 fn push_unique(paths: &mut Vec<PathBuf>, path: PathBuf) {
-    if !paths.contains(&path) {
+    if !paths.iter().any(|p| util::same_path(p, &path)) {
         paths.push(path);
     }
 }

@@ -481,7 +481,7 @@ pub(super) fn capture(
     (found, warnings)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::adapters::file_manager::support::testing::window;

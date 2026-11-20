@@ -1101,13 +1101,19 @@ fn approved_commands_reach_terminals_that_support_them() {
     let command = "npm run dev # approved-marker";
     let state = sessions_with_command(command, true);
     let encoded = powershell_encoded_command(command);
+    // macOS Terminal/iTerm2 type `cd '<folder>' && <command>` into the login shell, which is only
+    // done when every common shell reads the folder the same way. A backslash (a Windows-style
+    // test folder on a Windows host) fails that check, so the command is deliberately not run.
+    let folder_is_shell_safe = !abs("work/project").to_string_lossy().contains('\\');
     for (kind, os, steps) in all_plans(&state) {
         let dump = format!("{steps:?}");
         let found = dump.contains("approved-marker") || dump.contains(&encoded);
+        let types_into_login_shell =
+            os == OsKind::Macos && matches!(kind, Some(K::MacTerminal | K::ITerm2));
         let supported = !matches!(
             kind,
             None | Some(K::QTerminal | K::DeepinTerminal | K::Warp)
-        );
+        ) && (folder_is_shell_safe || !types_into_login_shell);
         assert_eq!(found, supported, "{kind:?} on {os:?}: {dump}");
     }
 }

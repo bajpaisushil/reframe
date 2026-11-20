@@ -245,7 +245,14 @@ fn expand_home(path: &str, home: Option<&Path>) -> String {
         return home.to_string_lossy().into_owned();
     }
     match path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
-        Some(rest) => home.join(rest).to_string_lossy().into_owned(),
+        Some(rest) => {
+            // Join in the home path's own style so a mapping never mixes `/` and `\`.
+            let home = home.to_string_lossy();
+            let windows_style = home.contains('\\') || home.as_bytes().get(1) == Some(&b':');
+            let sep = if windows_style { '\\' } else { '/' };
+            let rest = rest.replace(['/', '\\'], &sep.to_string());
+            format!("{}{sep}{rest}", home.trim_end_matches(['/', '\\']))
+        }
         None => path.to_string(),
     }
 }

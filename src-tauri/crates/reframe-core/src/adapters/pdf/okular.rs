@@ -293,6 +293,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn converts_urls_to_paths() {
         assert_eq!(
             url_to_path("/home/me/a.pdf"),

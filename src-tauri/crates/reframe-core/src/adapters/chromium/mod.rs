@@ -1168,10 +1168,12 @@ mod tests {
         let out = fx.capture(&chrome_process(&[]), &[], true);
         let (windows, _) = browser_state(&out);
         assert_eq!(windows.len(), 2);
-        assert_eq!(
-            windows[0].window_title.as_deref(),
-            Some("Inbox - Example Mail - Google Chrome")
-        );
+        let expected = if cfg!(target_os = "macos") {
+            "Inbox - Example Mail"
+        } else {
+            "Inbox - Example Mail - Google Chrome"
+        };
+        assert_eq!(windows[0].window_title.as_deref(), Some(expected));
     }
 
     #[test]

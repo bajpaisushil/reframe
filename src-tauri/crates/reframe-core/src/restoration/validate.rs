@@ -134,10 +134,13 @@ mod tests {
             },
         };
         assert!(check_target(&package(None), "App").is_ok());
-        assert!(check_target(&package(Some("/no/such/App.AppImage")), "App").is_err());
+        let missing = std::env::temp_dir().join("reframe-no-such-dir");
+        let app_image = missing.join("App.AppImage").display().to_string();
+        assert!(check_target(&package(Some(&app_image)), "App").is_err());
         let open = |t: &str| LaunchTarget::Open { target: t.into() };
         assert!(check_target(&open("https://example.com"), "Browser").is_ok());
-        assert!(check_target(&open("/no/such/file.pdf"), "Reader").is_err());
+        let pdf = missing.join("file.pdf").display().to_string();
+        assert!(check_target(&open(&pdf), "Reader").is_err());
     }
 
     #[test]
