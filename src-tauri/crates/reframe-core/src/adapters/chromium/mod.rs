@@ -6,8 +6,8 @@
 //! - **Identify**: the browser *main* process, by executable name and install folder (all
 //!   channels: Beta, Dev, Canary/Nightly), Flatpak id, Snap name or macOS bundle id. Child
 //!   processes, Electron apps and WebView hosts are never claimed (see [`browser`]).
-//! - **Capture** (only when the user enabled "Read browser tabs"): find the profile's newest
-//!   plain session file (`<user data>/<profile>/Sessions/Session_<n>`, or `Current Session` on
+//! - **Capture** (only when the user enabled "Capture open browser tabs"): find the profile's
+//!   newest plain session file (`<user data>/<profile>/Sessions/Session_<n>`, or `Current Session` on
 //!   older browsers), replay it ([`snss`]) and pair its normal windows with the windows the
 //!   user selected ([`matching`]). Candidate profiles are the one from
 //!   `--profile-directory=` (in a `--user-data-dir=` when given), those recorded in
@@ -131,9 +131,9 @@ impl ChromiumAdapter {
         };
         if !ctx.browser_tab_capture {
             return without_tabs(format!(
-                "{name}: tabs were not captured because \"Read browser tabs\" is turned off in \
-                 Settings. Only the windows were saved; the browser may reopen its own last \
-                 session."
+                "{name}: tabs were not captured because \"Capture open browser tabs\" is turned \
+                 off in Settings. Only the windows were saved; the browser may reopen its own \
+                 last session."
             ));
         }
         let Some(install) = &found.install else {
@@ -364,8 +364,8 @@ impl AppAdapter for ChromiumAdapter {
             "Reopen windows and tabs",
             true,
             Some(
-                "Needs \"Read browser tabs\" enabled in Settings. Internal pages such as New \
-                 Tab or Settings are not reopened.",
+                "Needs \"Capture open browser tabs\" turned on in Settings. Internal pages such \
+                 as New Tab or Settings are not reopened.",
             ),
         )
         .feature("Pinned tabs", false, Some("Reopened as normal tabs."))
@@ -1199,7 +1199,7 @@ mod tests {
         assert!(windows[0].tabs.is_empty());
         assert_eq!(profile, Some("Profile 3"));
         assert_eq!(out.warnings.len(), 1);
-        assert!(out.warnings[0].contains("Read browser tabs"));
+        assert!(out.warnings[0].contains("Capture open browser tabs"));
         // No windows and no tabs: nothing but the launch.
         let out = fx.capture(&chrome_process(&[]), &[], false);
         assert_eq!(out.state, AppState::None);

@@ -447,13 +447,13 @@ fn import_warnings(
         .count();
     if unresolved == 1 {
         warnings.push(
-            "1 application could not be found on this computer - choose its executable or \
+            "1 application could not be found on this computer — choose its executable or \
              skip it"
                 .to_string(),
         );
     } else if unresolved > 1 {
         warnings.push(format!(
-            "{unresolved} applications could not be found on this computer - choose their \
+            "{unresolved} applications could not be found on this computer — choose their \
              executables or skip them"
         ));
     }
@@ -465,11 +465,11 @@ fn import_warnings(
         .sum();
     if commands == 1 {
         warnings.push(
-            "1 startup command was imported switched off - review it before enabling".to_string(),
+            "1 startup command was imported switched off — review it before enabling".to_string(),
         );
     } else if commands > 1 {
         warnings.push(format!(
-            "{commands} startup commands were imported switched off - review them before enabling"
+            "{commands} startup commands were imported switched off — review them before enabling"
         ));
     }
     if let Some(warning) = removed_arguments_warning(&export.workspace.applications) {
@@ -478,7 +478,7 @@ fn import_warnings(
     let network = network_locations(export);
     if network > 0 {
         warnings.push(format!(
-            "{network} {} to other computers (such as \\\\server\\share) - Reframe did not \
+            "{network} {} to other computers (such as \\\\server\\share) — Reframe did not \
              access {}; restore this workspace only if you trust where the file came from",
             if network == 1 {
                 "path or link points"
@@ -496,7 +496,7 @@ fn import_warnings(
         };
         warnings.push(format!(
             "{missing_paths} folder{} or file{} used by this workspace {} not exist on this \
-             computer - {hint}; working directories that still do not exist are left out",
+             computer — {hint}; working directories that still do not exist are left out",
             if missing_paths == 1 { "" } else { "s" },
             if missing_paths == 1 { "" } else { "s" },
             if missing_paths == 1 { "does" } else { "do" },

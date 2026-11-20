@@ -448,6 +448,20 @@ impl Drop for BackToFirstDesktop {
     }
 }
 
+/// xterm stores its `-T` title only as `COMPOUND_TEXT` (no `_NET_WM_NAME`); in a UTF-8 locale
+/// Xlib writes characters outside Latin-1, such as an em dash, as a UTF-8 segment.
+#[test]
+fn compound_text_titles_with_non_latin1_characters() {
+    let Some(_guard) = enabled("compound_text_titles_with_non_latin1_characters") else {
+        return;
+    };
+    let platform = LinuxPlatform::new();
+    // `launch_xterm` finds the window by its exact title, so a misdecoded title fails here.
+    let (pid, window) = launch_xterm(&platform, "Grüße — ok", &[("LC_ALL", "C.UTF-8")]);
+    assert!(window.title.contains("Grüße — ok"), "{:?}", window.title);
+    close_and_wait(&platform, &window, pid);
+}
+
 /// Window managers put windows on other desktops into ICCCM IconicState (openbox, mutter):
 /// they are not minimized, and arranging them must not switch the user's desktop.
 #[test]

@@ -212,7 +212,7 @@ function StartupSection({ settings, save }: SectionProps) {
       <SettingsRow>
         <Switch
           label="Open Reframe when you log in"
-          description="Reframe starts quietly in the background when you sign in."
+          description="Reframe opens by itself each time you sign in to your computer."
           checked={startup.launchAtLogin}
           onChange={(on) => void save((s) => ({ ...s, startup: { ...s.startup, launchAtLogin: on } }))}
         />
@@ -370,7 +370,7 @@ function CloseWaitRow({ value, save }: { value: number; save: Save }) {
 
 function BrowserSection({ settings, save }: SectionProps) {
   return (
-    <SettingsSection id="settings-browser" title="Browser tabs" description="An optional integration for Chrome, Edge, Brave and other Chromium browsers.">
+    <SettingsSection id="settings-browser" title="Browser tabs" description="An optional integration for Chrome, Edge, Brave and Chromium.">
       <SettingsRow>
         <Switch
           label="Capture open browser tabs"

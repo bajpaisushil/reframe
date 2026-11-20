@@ -15,6 +15,8 @@ computer.
 
 <p align="center">
   <a href="https://github.com/bajpaisushil/reframe/releases/latest"><strong>⬇ Download Reframe for Windows, macOS or Linux</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/USER_GUIDE.md"><strong>📖 User guide</strong></a>
 </p>
 
 <p align="center">
@@ -49,6 +51,10 @@ After installing:
   your apps, projects, tabs and terminal folders, but cannot position windows
   ([why](docs/PLATFORM_SUPPORT.md)).
 - **Start at login** is off by default — turn it on in *Settings → Startup*.
+
+New to Reframe? The **[user guide](docs/USER_GUIDE.md)** walks through everything step by step,
+with screenshots: saving your first workspace, restoring and switching, editing, startup restore,
+moving workspaces between computers, and troubleshooting.
 
 Your data lives in `reframe.db` in your user's app-data folder (Windows `%APPDATA%\app.reframe.desktop`,
 macOS `~/Library/Application Support/app.reframe.desktop`, Linux `~/.local/share/app.reframe.desktop`).

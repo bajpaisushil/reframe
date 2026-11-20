@@ -281,7 +281,7 @@ fn round_trip_export_json_parse_preview_build() {
     }
     assert!(preview.suggested_path_mappings.is_empty());
     assert!(preview.warnings.iter().any(|w| w
-        == "1 startup command was imported switched off - review it before enabling"));
+        == "1 startup command was imported switched off — review it before enabling"));
     assert!(preview.warnings.iter().any(|w| w
         == "Custom launch arguments were removed for safety: Editor: --new-window; add them \
             again in the workspace editor if you trust them"));
@@ -680,7 +680,7 @@ fn preview_resolves_exported_found_and_unresolved_applications() {
         }
     );
     assert!(preview.warnings.iter().any(|w| w
-        == "1 application could not be found on this computer - choose its executable or skip it"));
+        == "1 application could not be found on this computer — choose its executable or skip it"));
     assert!(!preview.warnings.iter().any(|w| w.contains("exported on")));
 }
 
@@ -778,9 +778,9 @@ fn preview_lists_missing_paths_and_review_warnings() {
             .any(|w| w.starts_with("This workspace was exported on Windows"))
     );
     assert!(warnings.iter().any(|w| w
-        == "2 applications could not be found on this computer - choose their executables or skip them"));
+        == "2 applications could not be found on this computer — choose their executables or skip them"));
     assert!(warnings.iter().any(
-        |w| w == "2 startup commands were imported switched off - review them before enabling"
+        |w| w == "2 startup commands were imported switched off — review them before enabling"
     ));
     assert!(warnings.iter().any(|w| {
         w.starts_with("3 folders or files used by this workspace do not exist on this computer")
@@ -1599,7 +1599,7 @@ fn network_locations_are_reported_and_never_accessed() {
     );
     assert!(
         preview.warnings.iter().any(|w| w
-            == "5 paths or links point to other computers (such as \\\\server\\share) - \
+            == "5 paths or links point to other computers (such as \\\\server\\share) — \
                 Reframe did not access them; restore this workspace only if you trust where the \
                 file came from"),
         "{:?}",

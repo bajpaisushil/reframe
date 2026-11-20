@@ -30,13 +30,13 @@ export const CAPABILITY_COPY: Record<CapabilityLevel, CapabilityCopy> = {
     label: "Launch only",
     tone: "neutral",
     icon: Play,
-    explanation: "Reframe starts this app and arranges its windows, but can't reopen what was inside it.",
+    explanation: "Reframe starts this app (with the documents it was opened with, if any) and arranges its windows, but can't reopen anything else that was inside it.",
   },
   unsupported: {
     label: "Not supported",
     tone: "warning",
     icon: Ban,
-    explanation: "Reframe can't start this app on this computer, so it will be skipped when restoring.",
+    explanation: "Reframe has no way to restore this app on this system.",
   },
 };
 

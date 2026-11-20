@@ -283,7 +283,8 @@ impl Conn {
             .get_property(false, window, property, AtomEnum::ANY, 0, long_length)?)
     }
 
-    /// Text of a property reply (`UTF8_STRING` as UTF-8, others as Latin-1).
+    /// Text of a property reply (`UTF8_STRING` as UTF-8, `STRING` as Latin-1, `COMPOUND_TEXT` as
+    /// described at [`ewmh::decode_text`]).
     pub fn text(&self, reply: &GetPropertyReply) -> Option<String> {
         if reply.type_ == u32::from(AtomEnum::NONE) || reply.format != 8 {
             return None;
