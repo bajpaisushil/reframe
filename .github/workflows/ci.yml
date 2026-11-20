@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  frontend:
+    name: Frontend (typecheck, tests, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev \
+            xvfb openbox xterm x11-xserver-utils x11-utils
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build frontend (embedded by the Tauri crate)
+        run: npm ci && npm run build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Format
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test --workspace
+      - name: Platform tests with the test double
+        working-directory: src-tauri
+        run: cargo test -p reframe-platform --features mock
+      - name: X11 integration tests (real windows under Xvfb)
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: |
+          if [ -f crates/reframe-platform/tests/run-x11-tests.sh ]; then
+            bash crates/reframe-platform/tests/run-x11-tests.sh
+          fi
