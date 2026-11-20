@@ -14,6 +14,10 @@ with one click after a restart or when you switch between projects.
 computer.
 
 <p align="center">
+  <a href="https://github.com/bajpaisushil/reframe/releases/latest"><strong>⬇ Download Reframe for Windows, macOS or Linux</strong></a>
+</p>
+
+<p align="center">
   <img src="docs/screenshots/dashboard-light.png" width="49%" alt="Dashboard">
   <img src="docs/screenshots/explore-dark.png" width="49%" alt="Explore your desktop">
 </p>
@@ -21,6 +25,34 @@ computer.
   <img src="docs/screenshots/workspaces-detail-light.png" width="49%" alt="Workspace with its launch sequence">
   <img src="docs/screenshots/restore-switch-dialog-dark.png" width="49%" alt="Switching workspaces">
 </p>
+
+## Download & install
+
+One link for every computer: **[github.com/bajpaisushil/reframe/releases/latest](https://github.com/bajpaisushil/reframe/releases/latest)**.
+Open it, scroll to **Assets**, and download the file for your system:
+
+| Your computer | Download | Install |
+|---|---|---|
+| **Windows 10 / 11** | `Reframe_<version>_x64-setup.exe` (or the `.msi`) | Run it. Because the app is not code-signed yet, Windows may show *"Windows protected your PC"* — click **More info → Run anyway**. |
+| **Mac with Apple silicon** (M1 and later) | `Reframe_<version>_aarch64.dmg` | Open the `.dmg` and drag **Reframe** into **Applications**. The app is not notarized yet, so the first time right-click it → **Open** → **Open**. If macOS says the app *"is damaged"*, run `xattr -cr /Applications/Reframe.app` in Terminal and open it again. |
+| **Mac with Intel** | `Reframe_<version>_x64.dmg` | Same as above. |
+| **Ubuntu, Debian, Linux Mint** | `Reframe_<version>_amd64.deb` | `sudo apt install ./Reframe_*_amd64.deb` |
+| **Fedora, openSUSE** | `Reframe-<version>-1.x86_64.rpm` | `sudo dnf install ./Reframe-*.x86_64.rpm` |
+| **Any other Linux** | `Reframe_<version>_amd64.AppImage` | `chmod +x Reframe_*.AppImage && ./Reframe_*.AppImage` |
+
+After installing:
+
+- **macOS:** Reframe asks for **Accessibility** (to read and arrange windows) and **Screen
+  Recording** (to read window titles) in *System Settings → Privacy & Security*. Nothing is
+  recorded or sent anywhere; macOS just requires these permissions to see other apps' windows.
+- **Linux:** full window management needs an X11 session. On Wayland, Reframe still relaunches
+  your apps, projects, tabs and terminal folders, but cannot position windows
+  ([why](docs/PLATFORM_SUPPORT.md)).
+- **Start at login** is off by default — turn it on in *Settings → Startup*.
+
+Your data lives in `reframe.db` in your user's app-data folder (Windows `%APPDATA%\app.reframe.desktop`,
+macOS `~/Library/Application Support/app.reframe.desktop`, Linux `~/.local/share/app.reframe.desktop`).
+Uninstalling the app does not delete it; remove that folder to start fresh.
 
 ## What it does
 
