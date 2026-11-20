@@ -430,9 +430,11 @@ mod tests {
     fn settings_default_and_persist() {
         let db = Database::open_in_memory().unwrap();
         assert_eq!(db.load_settings().unwrap(), AppSettings::default());
-        let mut s = AppSettings::default();
-        s.theme = ThemePreference::Dark;
-        s.excluded_apps = vec!["exe:slack".into()];
+        let s = AppSettings {
+            theme: ThemePreference::Dark,
+            excluded_apps: vec!["exe:slack".into()],
+            ..AppSettings::default()
+        };
         db.save_settings(&s).unwrap();
         assert_eq!(db.load_settings().unwrap(), s);
     }
