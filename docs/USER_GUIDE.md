@@ -78,16 +78,15 @@ another computer.
 
 What Reframe needs depends on your system:
 
-- **macOS** needs two permissions so Reframe can see and arrange other apps' windows:
-  **Accessibility** (to read, move and close windows) and **Screen Recording** (to read window
-  titles). Nothing is recorded or sent anywhere: macOS requires them before any app can see
-  other apps' windows.
-  1. On the **Explore** page, click **Grant access** on the note *Reframe needs Accessibility
-     access* (or click **Grant** in **Settings → Permissions**). The note also lists these steps
-     for your version of macOS.
-  2. In *System Settings → Privacy & Security → Accessibility*, switch **Reframe** on.
-  3. Do the same for **Screen Recording** (called *Screen & System Audio Recording* on macOS 15
-     and later), then quit and reopen Reframe.
+- **macOS** needs no permission to see your apps and reopen them with their projects, tabs and
+  folders. One permission is optional: **Accessibility** lets Reframe read window titles and put
+  windows back where they were (move, resize, minimize, focus and close them). Reframe never
+  asks for Screen Recording and never records your screen; nothing is sent anywhere.
+  1. On the **Explore** page, click **Allow** on the note *Optional: allow Accessibility access*
+     (or click **Grant** in **Settings → Permissions**). The note also lists these steps for
+     your version of macOS. Click **Not now** to hide it until you next open Reframe.
+  2. In *System Settings → Privacy & Security → Accessibility*, switch **Reframe** on. It takes
+     effect immediately.
 
   Saving what's open in Finder, Preview or Skim, and restoring Terminal or iTerm2 sessions that
   use a profile or an approved startup command, also needs the **Automation** permission. macOS
@@ -767,8 +766,8 @@ See [section 6](#6-start-at-login-and-automatic-restore).
 
 ### Permissions (macOS)
 
-On macOS this section shows whether **Accessibility** and **Screen recording** are granted, with
-a **Grant** button for each one that isn't. Automation isn't listed here: macOS asks for it
+On macOS this section shows whether the optional **Accessibility** permission is granted, with
+a **Grant** button when it isn't. Automation isn't listed here: macOS asks for it
 separately for each app Reframe needs to control. To change it later, open
 *System Settings → Privacy & Security → Automation*. Other systems don't need this section, so
 it isn't shown there.
@@ -874,10 +873,9 @@ management, log in to an X11 (Xorg) session.
 
 ### macOS keeps asking for permissions, or window titles are missing
 
-Click **Grant** in **Settings → Permissions** (or **Grant access** on the Explore page) for each
-permission that isn't granted, then switch **Reframe** on under *Accessibility* and
-*Screen Recording* in *System Settings → Privacy & Security*. Quit and reopen Reframe after
-granting Screen Recording.
+Click **Grant** in **Settings → Permissions** (or **Allow** on the Explore page), then switch
+**Reframe** on under *Accessibility* in *System Settings → Privacy & Security*. Window titles
+come from the Accessibility permission, so they are missing until it is granted.
 
 If Reframe is already switched on there but still says it needs access (this can happen after
 you update Reframe), select Reframe in the list, remove it with the **–** button, quit and reopen

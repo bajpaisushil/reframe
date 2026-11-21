@@ -10,11 +10,16 @@
 //!
 //! # Permissions
 //!
-//! - **Accessibility** is required to move, resize, minimize, focus and close windows, to list
-//!   minimized windows, to detect full-screen windows and to read titles when Screen Recording
-//!   is not granted. Without it those operations return [`PlatformError::PermissionDenied`].
-//! - **Screen Recording** is required to read other applications' window titles from
-//!   CoreGraphics. Reframe never captures screen contents.
+//! Reframe asks for as little as possible: listing applications and on-screen windows and
+//! launching applications need no permission at all.
+//!
+//! - **Accessibility** (optional) is required to move, resize, minimize, focus and close
+//!   windows, to list minimized windows, to detect full-screen windows and to read other
+//!   applications' window titles. Without it those operations return
+//!   [`PlatformError::PermissionDenied`] and titles are empty.
+//! - **Screen Recording** is never requested and not reported by [`Platform::permissions`]:
+//!   Accessibility already provides titles. If the user granted it anyway, CoreGraphics titles
+//!   are used. Reframe never captures screen contents.
 //! - **Automation** (Apple Events) is not used by this module; [`Platform::permissions`] does not
 //!   report it because macOS only exposes it per target application.
 //!
@@ -679,22 +684,16 @@ impl Platform for MacPlatform {
         })
     }
 
-    /// Accessibility and Screen Recording (Automation is per target application and not
-    /// reported; see the module documentation).
+    /// Accessibility only. Screen Recording is not reported (Accessibility already provides
+    /// window titles, so Reframe never asks for it); Automation is per target application and
+    /// not reported either. See the module documentation.
     fn permissions(&self) -> Vec<PermissionStatus> {
         let major = autoreleasepool(|_| macos_major());
-        vec![
-            logic::permission_status(
-                PermissionKind::Accessibility,
-                permissions::accessibility_granted(),
-                major,
-            ),
-            logic::permission_status(
-                PermissionKind::ScreenRecording,
-                permissions::screen_recording_granted(),
-                major,
-            ),
-        ]
+        vec![logic::permission_status(
+            PermissionKind::Accessibility,
+            permissions::accessibility_granted(),
+            major,
+        )]
     }
 
     /// - Accessibility: the system prompt (`AXIsProcessTrustedWithOptions`) on the first request
@@ -749,13 +748,7 @@ mod tests {
         assert_eq!(info.display_server, DisplayServer::Quartz);
         assert!(info.os_version.starts_with("macOS"));
         let kinds: Vec<PermissionKind> = platform.permissions().iter().map(|p| p.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![
-                PermissionKind::Accessibility,
-                PermissionKind::ScreenRecording
-            ]
-        );
+        assert_eq!(kinds, vec![PermissionKind::Accessibility]);
     }
 
     #[test]

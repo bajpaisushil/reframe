@@ -1,13 +1,13 @@
 //! macOS Finder: which folder each Finder window shows, asked through AppleScript.
 //!
 //! `osascript` asks Finder for every window's name and target folder (front to back); the
-//! names are matched to the selected windows' titles. The first query triggers macOS's
-//! Automation permission prompt ("Reframe wants to control Finder"); until it is granted — or
-//! when Finder does not answer within a few seconds — no folders are captured and a warning
-//! explains why.
+//! names are matched to the selected windows' titles. It runs only when a workspace is
+//! captured, never for the Explore preview. The first query triggers macOS's Automation
+//! permission prompt ("Reframe wants to control Finder"); until it is granted — or when Finder
+//! does not answer within a few seconds — no folders are captured and a warning explains why.
 //!
 //! Limitations: windows showing no folder (Recents, AirDrop, search results) are skipped; only
-//! the front tab of a window is known; when window titles are unavailable (no Screen Recording
+//! the front tab of a window is known; when window titles are unavailable (no Accessibility
 //! permission) every Finder window's folder is captured.
 
 use std::path::PathBuf;
@@ -93,7 +93,7 @@ pub(super) fn folders_for_windows(
     };
 
     if windows.iter().all(|w| w.title.trim().is_empty()) {
-        // No titles to match (Screen Recording permission missing): every folder Finder shows.
+        // No titles to match (Accessibility permission missing): every folder Finder shows.
         let folders = records
             .into_iter()
             .map(|r| FolderRef {

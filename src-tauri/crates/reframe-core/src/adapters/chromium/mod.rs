@@ -917,6 +917,7 @@ mod tests {
                 platform: &self.platform,
                 info: &info,
                 browser_tab_capture: tabs,
+                apple_events: false,
             };
             let identity = identity();
             let all = vec![process.clone()];

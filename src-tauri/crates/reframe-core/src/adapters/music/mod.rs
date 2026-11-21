@@ -549,6 +549,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let name = PathBuf::from(app_exe)
             .file_name()

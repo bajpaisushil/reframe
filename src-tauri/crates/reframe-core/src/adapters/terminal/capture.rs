@@ -974,6 +974,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let mut server = p(100, 1, "gnome-terminal-", &[], None);
         server.executable_path = Some("/usr/libexec/gnome-terminal-server".into());
@@ -1009,6 +1010,7 @@ mod tests {
             platform: &bare,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let out = capture(&ctx, &fx.input());
         assert_eq!(out.launch.executable, None);

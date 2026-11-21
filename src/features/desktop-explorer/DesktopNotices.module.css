@@ -17,22 +17,10 @@
   background: var(--bg-subtle);
 }
 
-.warning {
-  border: 1px solid transparent;
-  background: var(--warning-soft);
-  align-items: center;
-}
-
 .icon {
   flex: none;
   margin-top: 2px;
   color: var(--icon-muted);
-}
-
-.warning .icon {
-  align-self: flex-start;
-  margin-top: 1px;
-  color: var(--warning-text);
 }
 
 .copy {
@@ -59,8 +47,11 @@
   line-height: var(--leading-xs);
 }
 
-.action {
+.actions {
+  display: flex;
   flex: none;
+  align-self: center;
+  gap: var(--space-2);
 }
 
 .notes {

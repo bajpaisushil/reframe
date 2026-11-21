@@ -37,6 +37,10 @@ pub struct CaptureContext<'a> {
     pub info: &'a PlatformInfo,
     /// The user allows reading browser session files (optional browser integration).
     pub browser_tab_capture: bool,
+    /// Adapters may send Apple Events (AppleScript) to other applications. Off while previewing
+    /// in Explore, so merely looking at the desktop never triggers macOS's "Reframe wants to
+    /// control …" prompts; on when the user captures a workspace.
+    pub apple_events: bool,
 }
 
 /// The application being captured.

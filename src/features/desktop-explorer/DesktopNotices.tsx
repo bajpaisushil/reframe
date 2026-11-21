@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Info, ShieldAlert } from "lucide-react";
+import { Info, ShieldCheck } from "lucide-react";
 import { Button, Icon } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import type { PermissionKind, PermissionStatus } from "@/types";
@@ -15,28 +15,62 @@ export interface PermissionNoticesProps {
   granting: PermissionKind | null;
 }
 
-/** One calm callout per missing permission (macOS), with a "Grant access" button. */
+/** Permissions the user chose "Not now" for; hidden until Reframe restarts. */
+const DISMISSED_KEY = "reframe.permissionNotices.dismissed";
+
+function readDismissed(): PermissionKind[] {
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(DISMISSED_KEY) ?? "[]");
+    return Array.isArray(parsed) ? (parsed as PermissionKind[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDismissed(kinds: readonly PermissionKind[]) {
+  try {
+    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify(kinds));
+  } catch {
+    // Storage unavailable: the notice simply stays hidden until the page reloads.
+  }
+}
+
+/**
+ * One calm callout per missing permission (macOS). Permissions are optional — Reframe reopens
+ * apps without them — so each callout can be put off with "Not now".
+ */
 export function PermissionNotices({ missing, onGrant, granting }: PermissionNoticesProps) {
-  if (missing.length === 0) return null;
+  const [dismissed, setDismissed] = useState<PermissionKind[]>(readDismissed);
+  const visible = missing.filter((permission) => !dismissed.includes(permission.kind));
+  if (visible.length === 0) return null;
+  const dismiss = (kind: PermissionKind) => {
+    const next = [...dismissed, kind];
+    setDismissed(next);
+    writeDismissed(next);
+  };
   return (
     <div className={styles.stack}>
-      {missing.map((permission) => (
-        <div key={permission.kind} className={cx(styles.callout, styles.warning)} role="status">
-          <Icon icon={ShieldAlert} size={18} className={styles.icon} />
+      {visible.map((permission) => (
+        <div key={permission.kind} className={cx(styles.callout, styles.info)} role="status">
+          <Icon icon={ShieldCheck} size={18} className={styles.icon} />
           <div className={styles.copy}>
-            <p className={styles.title}>Reframe needs {PERMISSION_NAMES[permission.kind]} access</p>
+            <p className={styles.title}>Optional: allow {PERMISSION_NAMES[permission.kind]} access</p>
             <p className={styles.text}>{permission.purpose}</p>
             {permission.instructions && <p className={styles.hint}>{permission.instructions}</p>}
           </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            className={styles.action}
-            loading={granting === permission.kind}
-            onClick={() => onGrant(permission.kind)}
-          >
-            Grant access
-          </Button>
+          <div className={styles.actions}>
+            <Button size="sm" variant="ghost" onClick={() => dismiss(permission.kind)}>
+              Not now
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={granting === permission.kind}
+              onClick={() => onGrant(permission.kind)}
+            >
+              Allow
+            </Button>
+          </div>
         </div>
       ))}
     </div>

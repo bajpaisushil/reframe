@@ -1294,6 +1294,7 @@ fn capture_then_restore_round_trip() {
         platform: &platform,
         info: &info,
         browser_tab_capture: false,
+        apple_events: false,
     };
     let input = CaptureInput {
         identity: &identity,

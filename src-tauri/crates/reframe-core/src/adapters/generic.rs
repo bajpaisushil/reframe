@@ -279,6 +279,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let identity = AppIdentity {
             app_id: "exe:gedit".into(),

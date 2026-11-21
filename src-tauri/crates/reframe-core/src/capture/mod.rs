@@ -57,6 +57,7 @@ pub fn capture_entries(
             platform,
             info: &state.info,
             browser_tab_capture: options.browser_tab_capture,
+            apple_events: true,
         },
         adapters,
         issues: AdapterIssues::default(),

@@ -640,6 +640,7 @@ mod tests {
             platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let all: Vec<ProcessInfo> = processes.iter().map(|p| (*p).clone()).collect();
         let input = CaptureInput {
@@ -912,6 +913,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let identity = Variant::Stable.identity();
         let input = CaptureInput {

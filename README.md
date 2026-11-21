@@ -44,9 +44,10 @@ Open it, scroll to **Assets**, and download the file for your system:
 
 After installing:
 
-- **macOS:** Reframe asks for **Accessibility** (to read and arrange windows) and **Screen
-  Recording** (to read window titles) in *System Settings → Privacy & Security*. Nothing is
-  recorded or sent anywhere; macOS just requires these permissions to see other apps' windows.
+- **macOS:** Reframe works without any special permission: it can see your apps and reopen
+  them, with their projects, tabs and folders. To also put windows back exactly where they were,
+  allow the optional **Accessibility** permission (Reframe shows how). It never asks for Screen
+  Recording and never records your screen, and nothing is sent anywhere.
 - **Linux:** full window management needs an X11 session. On Wayland, Reframe still relaunches
   your apps, projects, tabs and terminal folders, but cannot position windows
   ([why](docs/PLATFORM_SUPPORT.md)).

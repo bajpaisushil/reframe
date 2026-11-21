@@ -211,7 +211,7 @@ impl AppAdapter for FileManagerAdapter {
         )
     }
 
-    fn capture(&self, _ctx: &CaptureContext<'_>, input: &CaptureInput<'_>) -> CaptureOutput {
+    fn capture(&self, ctx: &CaptureContext<'_>, input: &CaptureInput<'_>) -> CaptureOutput {
         let (launch, mut warnings) = support::launch_config(input);
         let (mut folders, folder_warnings) = match input.identity.app_id.as_str() {
             "explorer" => {
@@ -223,7 +223,9 @@ impl AppAdapter for FileManagerAdapter {
                     .collect();
                 explorer::capture(&windows)
             }
-            "finder" => finder::capture(&input.windows),
+            // Finder is asked through AppleScript, which only a real capture may do.
+            "finder" if ctx.apple_events => finder::capture(&input.windows),
+            "finder" => (Vec::new(), Vec::new()),
             _ => linux::capture(&input.windows, &self.search),
         };
         let name = &input.identity.display_name;
@@ -740,6 +742,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let p = process(5, "dolphin", Some("/usr/bin/dolphin"));
         let w1 = window("1", 5, "reframe — Dolphin", Some("dolphin"));
@@ -779,6 +782,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let identity = AppIdentity {
             app_id: "nautilus".into(),
@@ -797,6 +801,39 @@ mod tests {
             vec!["Files: no process information available.".to_string()]
         );
         assert_eq!(platform.processes().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn previews_never_ask_finder_through_apple_events() {
+        // Explore previews run with `apple_events: false`: Finder must not be scripted (that
+        // would trigger macOS's Automation prompt just from looking at the desktop).
+        let adapter = FileManagerAdapter::new();
+        let (platform, info) = platform(OsKind::Macos);
+        let ctx = CaptureContext {
+            platform: &platform,
+            info: &info,
+            browser_tab_capture: false,
+            apple_events: false,
+        };
+        let identity = AppIdentity {
+            app_id: "finder".into(),
+            display_name: "Finder".into(),
+        };
+        let input = CaptureInput {
+            identity: &identity,
+            processes: Vec::new(),
+            windows: Vec::new(),
+            all_processes: &[],
+        };
+        let out = adapter.capture(&ctx, &input);
+        assert_eq!(out.state, AppState::None);
+        assert!(
+            out.warnings
+                .iter()
+                .all(|w| !w.contains("could not ask Finder")),
+            "{:?}",
+            out.warnings
+        );
     }
 
     #[test]

@@ -257,7 +257,7 @@ impl AppAdapter for PdfAdapter {
         support::with_window_placement(capability, info)
     }
 
-    fn capture(&self, _ctx: &CaptureContext<'_>, input: &CaptureInput<'_>) -> CaptureOutput {
+    fn capture(&self, ctx: &CaptureContext<'_>, input: &CaptureInput<'_>) -> CaptureOutput {
         let (launch, mut warnings) = support::launch_config(input);
         let app_id = input.identity.app_id.as_str();
         let name = input.identity.display_name.as_str();
@@ -276,7 +276,7 @@ impl AppAdapter for PdfAdapter {
             }
         }
 
-        let scripted = if scripting::is_scriptable(app_id) {
+        let scripted = if ctx.apple_events && scripting::is_scriptable(app_id) {
             scripting::open_documents(app_id).unwrap_or_else(|error| {
                 warnings.push(format!(
                     "{name}: could not ask for the open documents ({error}). If macOS asked, \
@@ -1025,6 +1025,7 @@ mod tests {
             platform: &platform,
             info: &info,
             browser_tab_capture: false,
+            apple_events: false,
         };
         let identity = adapter.identify(process, windows).unwrap();
         let all = vec![process.clone()];

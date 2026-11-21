@@ -102,6 +102,7 @@ pub fn build_snapshot(
         platform,
         info: &state.info,
         browser_tab_capture: options.browser_tab_capture,
+        apple_events: false,
     };
     let mut issues = AdapterIssues::default();
     let applications: Vec<DiscoveredApplication> = groups

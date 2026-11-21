@@ -10,7 +10,7 @@ application shows its restore level (**Full restore**, **Partial**, **Launch onl
 
 | Capability | Windows 10/11 | macOS 12+ | Linux X11 | Linux Wayland |
 |---|---|---|---|---|
-| List application windows | ✅ | ✅ (needs Screen Recording for titles) | ✅ | ❌ compositor restriction¹ |
+| List application windows | ✅ | ✅ (titles need Accessibility) | ✅ | ❌ compositor restriction¹ |
 | Read window position, size, state | ✅ | ✅ (needs Accessibility) | ✅ | ❌¹ |
 | Move/resize, maximize, minimize | ✅ | ✅ (needs Accessibility; no true maximize) | ✅ (window manager may adjust) | ❌¹ |
 | Close windows gracefully | ✅ `WM_CLOSE` | ✅ window close button (Accessibility) | ✅ `_NET_CLOSE_WINDOW` | ❌¹ |
@@ -49,9 +49,13 @@ Please report anything that misbehaves on real Windows or macOS hardware.
 
 ## macOS
 
-- **Accessibility** permission is required to read and move windows and to close them; **Screen
-  Recording** is required to read other apps' window titles. Reframe shows how to grant both.
-  A Screen Recording grant takes effect after restarting Reframe.
+- No permission is needed to list apps and on-screen windows or to reopen apps. The optional
+  **Accessibility** permission is required to read window titles and to move, minimize and close
+  windows; Reframe shows how to grant it. Reframe never asks for **Screen Recording** (if it was
+  granted anyway, its window titles are used).
+- Window contents are never captured. Apple Events (**Automation**) are sent only when you save
+  a workspace containing Finder, Preview or Skim, or restore a Terminal/iTerm2 profile; just
+  opening Explore never triggers an Automation prompt.
 - Only windows on the **current Space** are listed (no public API for other Spaces). Windows of
   hidden apps (⌘H) are not listed; minimized windows are listed when Accessibility is granted.
 - macOS has no true "maximize": a window that fills the screen's visible area is treated as

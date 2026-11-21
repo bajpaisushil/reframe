@@ -1072,9 +1072,10 @@ pub(crate) fn permission_status(
     };
     let (purpose, instructions) = match kind {
         PermissionKind::Accessibility => (
-            "Reading window positions, sizes and states (including minimized and full-screen \
-             windows) and moving, resizing, focusing and closing windows when restoring a \
-             workspace."
+            "Optional: lets Reframe put windows back where they were. It reads window titles, \
+             positions and states (including minimized and full-screen windows) and moves, \
+             resizes, focuses and closes windows when restoring a workspace. Reopening apps, \
+             projects, tabs and folders works without it."
                 .to_string(),
             [
                 open_pane("Accessibility"),
@@ -1150,23 +1151,18 @@ pub(crate) fn capabilities(
             .to_string(),
         "Windows of hidden applications are not listed, except minimized ones.".to_string(),
     ];
-    if !screen_recording {
-        window_notes.push(if accessibility {
-            "Without the Screen Recording permission, window titles are read through \
-             Accessibility and may be missing for some applications."
-                .to_string()
-        } else {
-            "Without the Screen Recording permission, other applications' window titles are not \
-             available."
-                .to_string()
-        });
-    }
+    // Titles come from Accessibility (Reframe never asks for Screen Recording; CoreGraphics
+    // titles are used only if the user granted it anyway).
     if !accessibility {
-        window_notes.push(
+        window_notes.push(if screen_recording {
             "Without the Accessibility permission, minimized windows are not listed and \
              full-screen windows are reported as normal windows."
-                .to_string(),
-        );
+                .to_string()
+        } else {
+            "Without the Accessibility permission, window titles are not available, minimized \
+             windows are not listed and full-screen windows are reported as normal windows."
+                .to_string()
+        });
     }
 
     PlatformCapabilities {
@@ -2414,7 +2410,13 @@ mod tests {
             crate::SupportLevel::Unsupported
         );
         let note = none.list_windows.note.unwrap();
-        assert!(note.contains("Screen Recording") && note.contains("minimized"));
+        assert!(note.contains("window titles") && note.contains("minimized"));
+        assert!(
+            !note.contains("Screen Recording"),
+            "never asks for Screen Recording"
+        );
+        let cg_titles = capabilities(false, true, 15).list_windows.note.unwrap();
+        assert!(!cg_titles.contains("window titles") && cg_titles.contains("minimized"));
 
         let all = capabilities(true, true, 13);
         assert_eq!(all.move_windows.level, crate::SupportLevel::Full);
@@ -2426,12 +2428,10 @@ mod tests {
         assert_eq!(all.application_icons.level, crate::SupportLevel::Full);
 
         let titles_from_ax = capabilities(true, false, 15);
+        let note = titles_from_ax.list_windows.note.clone().unwrap();
         assert!(
-            titles_from_ax
-                .list_windows
-                .note
-                .unwrap()
-                .contains("through Accessibility")
+            !note.contains("Screen Recording") && !note.contains("Accessibility"),
+            "Accessibility alone is enough: {note}"
         );
         assert_eq!(
             titles_from_ax.focus_windows.level,
