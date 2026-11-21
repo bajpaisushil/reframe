@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Signed macOS builds use the hardened runtime, which blocks Apple Events unless this is declared.
+	     Integrations (terminal profiles, open documents, browser tabs) send them via /usr/bin/osascript;
+	     macOS still asks the user before Reframe may control each application. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>

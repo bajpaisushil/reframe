@@ -36,7 +36,7 @@ Open it, scroll to **Assets**, and download the file for your system:
 | Your computer | Download | Install |
 |---|---|---|
 | **Windows 10 / 11** | `Reframe_<version>_x64-setup.exe` (or the `.msi`) | Run it. Because the app is not code-signed yet, Windows may show *"Windows protected your PC"* — click **More info → Run anyway**. |
-| **Mac with Apple silicon** (M1 and later) | `Reframe_<version>_aarch64.dmg` | Open the `.dmg` and drag **Reframe** into **Applications**. The app is not notarized yet, so the first time right-click it → **Open** → **Open**. If macOS says the app *"is damaged"*, run `xattr -cr /Applications/Reframe.app` in Terminal and open it again. |
+| **Mac with Apple silicon** (M1 and later) | `Reframe_<version>_aarch64.dmg` | Open the `.dmg` and drag **Reframe** into **Applications**. Reframe is not notarized by Apple yet, so macOS blocks the first launch: open it once, then go to *System Settings → Privacy & Security*, click **Open Anyway** next to the Reframe message, and confirm. (On macOS 14 and earlier you can instead right-click the app → **Open** → **Open**.) If macOS says the app *"is damaged and can't be opened"*, run `xattr -dr com.apple.quarantine /Applications/Reframe.app` in Terminal and open it again. |
 | **Mac with Intel** | `Reframe_<version>_x64.dmg` | Same as above. |
 | **Ubuntu, Debian, Linux Mint** | `Reframe_<version>_amd64.deb` | `sudo apt install ./Reframe_*_amd64.deb` |
 | **Fedora, openSUSE** | `Reframe-<version>-1.x86_64.rpm` | `sudo dnf install ./Reframe-*.x86_64.rpm` |
